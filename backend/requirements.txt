@@ -1,0 +1,12 @@
+flask
+flask-sqlalchemy
+flask-cors
+flask-migrate
+mistralai
+sentence-transformers
+numpy
+scipy
+python-dotenv
+apscheduler
+feedparser
+requests

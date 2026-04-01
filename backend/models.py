@@ -1,0 +1,164 @@
+from datetime import datetime
+from database import db
+
+
+class Agent(db.Model):
+    __tablename__ = "agents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    handle = db.Column(db.String(50), unique=True, nullable=False)
+    bio = db.Column(db.Text, default="")
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # Current Big Five scores (0–100), updated after each IPIP assessment
+    openness = db.Column(db.Float, nullable=True)
+    conscientiousness = db.Column(db.Float, nullable=True)
+    extraversion = db.Column(db.Float, nullable=True)
+    agreeableness = db.Column(db.Float, nullable=True)
+    neuroticism = db.Column(db.Float, nullable=True)
+
+    posts = db.relationship("Post", backref="agent", lazy=True)
+    snapshots = db.relationship("PersonalitySnapshot", backref="agent", lazy=True)
+    ipip_responses = db.relationship("IpipResponse", backref="agent", lazy=True)
+
+    following = db.relationship(
+        "Follow",
+        foreign_keys="Follow.follower_id",
+        backref=db.backref("follower", lazy=True),
+        lazy=True,
+    )
+    followers = db.relationship(
+        "Follow",
+        foreign_keys="Follow.followee_id",
+        backref=db.backref("followee", lazy=True),
+        lazy=True,
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "handle": self.handle,
+            "bio": self.bio,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat(),
+            "personality": {
+                "openness": self.openness,
+                "conscientiousness": self.conscientiousness,
+                "extraversion": self.extraversion,
+                "agreeableness": self.agreeableness,
+                "neuroticism": self.neuroticism,
+            },
+        }
+
+
+class Post(db.Model):
+    __tablename__ = "posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    agent_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    tick_number = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
+    news_context = db.Column(db.JSON, nullable=True)  # headlines shown to agent when post was generated
+    embedding = db.Column(db.JSON, nullable=True)
+
+    replies = db.relationship(
+        "Post",
+        backref=db.backref("parent", remote_side="Post.id"),
+        lazy=True,
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "agent_id": self.agent_id,
+            "agent_handle": self.agent.handle if self.agent else None,
+            "agent_name": self.agent.name if self.agent else None,
+            "content": self.content,
+            "tick_number": self.tick_number,
+            "created_at": self.created_at.isoformat(),
+            "parent_id": self.parent_id,
+            "reply_count": len(self.replies),
+            "news_context": self.news_context,
+        }
+
+
+class Follow(db.Model):
+    __tablename__ = "follows"
+
+    id = db.Column(db.Integer, primary_key=True)
+    follower_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=False)
+    followee_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("follower_id", "followee_id", name="uq_follow"),
+    )
+
+
+class PersonalitySnapshot(db.Model):
+    """Time-series record of Big Five scores per agent per IPIP assessment."""
+    __tablename__ = "personality_snapshots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    agent_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=False)
+    tick_number = db.Column(db.Integer, nullable=False)
+    openness = db.Column(db.Float, nullable=False)
+    conscientiousness = db.Column(db.Float, nullable=False)
+    extraversion = db.Column(db.Float, nullable=False)
+    agreeableness = db.Column(db.Float, nullable=False)
+    neuroticism = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "agent_id": self.agent_id,
+            "tick_number": self.tick_number,
+            "openness": self.openness,
+            "conscientiousness": self.conscientiousness,
+            "extraversion": self.extraversion,
+            "agreeableness": self.agreeableness,
+            "neuroticism": self.neuroticism,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class IpipResponse(db.Model):
+    """Raw item-level responses from each IPIP-NEO-120 administration."""
+    __tablename__ = "ipip_responses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    agent_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=False)
+    tick_number = db.Column(db.Integer, nullable=False)
+    item_number = db.Column(db.Integer, nullable=False)  # 1–120
+    score = db.Column(db.Integer, nullable=False)         # 1–5
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class SimState(db.Model):
+    """Single-row table tracking global simulation state."""
+    __tablename__ = "sim_state"
+
+    id = db.Column(db.Integer, primary_key=True)
+    current_tick = db.Column(db.Integer, default=0, nullable=False)
+    is_running = db.Column(db.Boolean, default=False, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    @classmethod
+    def get(cls):
+        state = cls.query.first()
+        if state is None:
+            state = cls(current_tick=0, is_running=False)
+            db.session.add(state)
+            db.session.commit()
+        return state
