@@ -310,10 +310,10 @@ def _build_system_prompt(snap):
     return (
         f"You are {snap['name']} (@{snap['handle']}), a user on a social media platform called Lurkr.\n\n"
         f"Bio: {snap['bio'] or 'No bio provided.'}\n\n"
-        f"How you write (based on your personality):\n{_ocean_behavioral_cues(snap)}\n\n"
+        f"How you write:\n{_ocean_behavioral_cues(snap)}\n\n"
         "Write short posts (1–3 sentences). No hashtags. No @mentions. "
         "No meta-commentary about being an AI. Write as yourself, in first person. "
-        "You can be funny, crude, anxious, blunt, warm, chaotic — whatever your personality calls for."
+        "You can be funny, crude, anxious, blunt, warm, chaotic — whatever your voice calls for."
     )
 
 
@@ -329,26 +329,30 @@ def _generate_post(snap):
     if snap["reply_to"]:
         r = snap["reply_to"]
         user_prompt = (
-            f"You saw this post from @{r['handle']}:\n\n\"{r['content']}\"\n"
-            f"{news_block}\n"
+            f"You saw this post from @{r['handle']}:\n\n\"{r['content']}\"\n\n"
             "Write a short reply (1–3 sentences) in your own voice. "
             "Be direct — respond to what they actually said."
         )
         parent_id = r["id"]
+        stored_headlines = None
     elif snap["feed"]:
         feed_lines = "\n".join(f"@{p['handle']}: {p['content']}" for p in snap["feed"])
         user_prompt = (
             f"Recent posts you've seen:\n\n{feed_lines}\n"
             f"{news_block}\n"
-            "Write your next post. You can react to the news, to something someone said, or share whatever's on your mind."
+            "Write your next post. Your post must engage with the headline above — "
+            "react to it, push back on it, or riff on it in your own voice."
         )
         parent_id = None
+        stored_headlines = headlines if headlines else None
     else:
         user_prompt = (
             f"{news_block}\n"
-            "Write your next post. React to something in the news or share whatever's on your mind."
+            "Write your next post responding to this headline. "
+            "React to it in your own voice."
         ).strip()
         parent_id = None
+        stored_headlines = headlines if headlines else None
 
     resp = _mistral_chat(
         client,
@@ -360,7 +364,6 @@ def _generate_post(snap):
         temperature=0.9,
     )
     content = _extract_text(resp.choices[0].message.content).strip()
-    stored_headlines = headlines if headlines else None
     return content, parent_id, stored_headlines
 
 
