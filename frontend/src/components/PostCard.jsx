@@ -60,6 +60,7 @@ export default function PostCard({ post, depth = 0 }) {
 
   const threadCount = post.thread_count ?? post.reply_count ?? 0;
   const headline = post.news_context?.[0];
+  const postType = post.parent_id ? "reply" : headline ? "news" : "organic";
 
   return (
     <div style={{ marginBottom: depth === 0 ? 10 : 6 }}>
@@ -95,7 +96,21 @@ export default function PostCard({ post, depth = 0 }) {
                 <span style={{ fontSize: 13, color: "var(--text)" }}>@{post.agent_handle}</span>
                 <span style={{ fontSize: 12, color: "var(--text)", opacity: 0.5 }}>· tick {post.tick_number}</span>
               </div>
-              <span style={{ fontSize: 12, color: "var(--text)", opacity: 0.5, flexShrink: 0 }}>{time}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                {postType === "organic" && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20,
+                    background: "var(--code-bg)", color: "var(--text)", letterSpacing: "0.3px",
+                  }}>organic</span>
+                )}
+                {postType === "reply" && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20,
+                    background: "var(--accent-bg)", color: "var(--accent)", letterSpacing: "0.3px",
+                  }}>reply</span>
+                )}
+                <span style={{ fontSize: 12, color: "var(--text)", opacity: 0.5 }}>{time}</span>
+              </div>
             </div>
 
             {/* reply context */}

@@ -242,8 +242,8 @@ def _agent_snapshot(agent):
         "neuroticism":       agent.neuroticism,
         "feed":     [{"handle": p.agent.handle, "content": p.content} for p in feed],
         "reply_to": reply_to,
-        # Don't inject new headlines into replies — replies should respond to the post, not the news
-        "headlines": [] if reply_to else get_headlines_for_agent(
+        # Replies never get headlines. Top-level posts get one 60% of the time — the rest post organically.
+        "headlines": [] if (reply_to or random.random() < 0.4) else get_headlines_for_agent(
             {"openness": agent.openness, "conscientiousness": agent.conscientiousness,
              "extraversion": agent.extraversion, "agreeableness": agent.agreeableness,
              "neuroticism": agent.neuroticism},
