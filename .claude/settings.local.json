@@ -7,7 +7,8 @@
       "Bash(brew install:*)",
       "Bash(curl -fsSL https://fnm.vercel.app/install)",
       "Bash(bash)",
-      "Bash(curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh)"
+      "Bash(curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh)",
+      "Bash(git remote:*)"
     ]
   }
 }

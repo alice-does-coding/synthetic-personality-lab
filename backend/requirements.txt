@@ -1,12 +1,8 @@
 flask
-flask-sqlalchemy
 flask-cors
+flask-sqlalchemy
 flask-migrate
 mistralai
-sentence-transformers
-numpy
-scipy
-python-dotenv
-apscheduler
 feedparser
 requests
+python-dotenv
