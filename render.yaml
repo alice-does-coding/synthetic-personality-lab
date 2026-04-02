@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: lurkr-backend
+    name: lurkr-api
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt && python seed.py
@@ -12,16 +12,20 @@ services:
         sync: false
       - key: SIMULATION_TICK_SECONDS
         value: 30
+      - key: ADMIN_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://lurkr.net
 
   - type: web
-    name: lurkr-frontend
+    name: lurkr-app
     runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        sync: false  # Set this to your backend URL after first deploy, e.g. https://lurkr-backend.onrender.com/api
+        sync: false  # Set to https://api.lurkr.net/api after custom domain is configured
     routes:
       - type: rewrite
         source: /*

@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, current_app
 
+from auth import require_admin
 from database import db
 from models import SimState
 
@@ -19,6 +20,7 @@ def status():
 
 
 @sim_bp.route("/start", methods=["POST"])
+@require_admin
 def start():
     state = SimState.get()
     state.is_running = True
@@ -27,6 +29,7 @@ def start():
 
 
 @sim_bp.route("/stop", methods=["POST"])
+@require_admin
 def stop():
     state = SimState.get()
     state.is_running = False
@@ -35,6 +38,7 @@ def stop():
 
 
 @sim_bp.route("/tick", methods=["POST"])
+@require_admin
 def manual_tick():
     """Fire a single tick immediately — useful for development."""
     from simulation import run_tick
@@ -44,6 +48,7 @@ def manual_tick():
 
 
 @sim_bp.route("/assess", methods=["POST"])
+@require_admin
 def manual_assess():
     """Kick off a full IPIP assessment in the background and return immediately."""
     import threading

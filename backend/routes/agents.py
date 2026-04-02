@@ -3,6 +3,7 @@ from collections import defaultdict
 from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
+from auth import require_admin
 from database import db
 from models import Agent, Follow, PersonalitySnapshot
 
@@ -16,6 +17,7 @@ def list_agents():
 
 
 @agents_bp.route("/", methods=["POST"])
+@require_admin
 def create_agent():
     data = request.get_json()
     agent = Agent(
@@ -39,6 +41,7 @@ def get_agent(agent_id):
 
 
 @agents_bp.route("/<int:agent_id>", methods=["DELETE"])
+@require_admin
 def deactivate_agent(agent_id):
     agent = Agent.query.get_or_404(agent_id)
     agent.is_active = False
@@ -84,6 +87,7 @@ def population_drift():
 
 
 @agents_bp.route("/<int:follower_id>/follow/<int:followee_id>", methods=["POST"])
+@require_admin
 def follow(follower_id, followee_id):
     if follower_id == followee_id:
         return jsonify({"error": "Cannot follow yourself"}), 400
@@ -99,6 +103,7 @@ def follow(follower_id, followee_id):
 
 
 @agents_bp.route("/<int:follower_id>/follow/<int:followee_id>", methods=["DELETE"])
+@require_admin
 def unfollow(follower_id, followee_id):
     follow = Follow.query.filter_by(
         follower_id=follower_id, followee_id=followee_id

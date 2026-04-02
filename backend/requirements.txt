@@ -7,3 +7,4 @@ feedparser
 requests
 python-dotenv
 gunicorn
+flask-limiter

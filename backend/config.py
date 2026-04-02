@@ -23,3 +23,7 @@ class Config:
     MISTRAL_RATE_LIMIT = float(os.getenv("MISTRAL_RATE_LIMIT", 5.0))
     # Local NLP microservice
     NLP_SERVICE_URL = os.getenv("NLP_SERVICE_URL", "http://localhost:5001")
+    # Admin key — required to call sim control and agent write endpoints
+    ADMIN_KEY = os.getenv("ADMIN_KEY")
+    # Restrict CORS in production — set to https://lurkr.net via env var
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")

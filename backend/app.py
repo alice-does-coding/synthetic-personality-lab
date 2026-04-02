@@ -3,6 +3,8 @@ import time
 
 from flask import Flask
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from config import Config
 from database import init_db
@@ -12,7 +14,16 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    CORS(app)
+    origins = app.config.get("CORS_ORIGINS", "*")
+    CORS(app, origins=origins)
+
+    Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["120 per minute"],
+        storage_uri="memory://",
+    )
+
     init_db(app)
 
     from routes.agents import agents_bp
