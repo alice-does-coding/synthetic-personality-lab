@@ -340,16 +340,15 @@ def _generate_post(snap):
         user_prompt = (
             f"Recent posts you've seen:\n\n{feed_lines}\n"
             f"{news_block}\n"
-            "Write your next post. Your post must engage with the headline above — "
-            "react to it, push back on it, or riff on it in your own voice."
+            "Write your next post. You can react to the headline, riff on something someone said, "
+            "or post whatever is on your mind."
         )
         parent_id = None
         stored_headlines = headlines if headlines else None
     else:
         user_prompt = (
             f"{news_block}\n"
-            "Write your next post responding to this headline. "
-            "React to it in your own voice."
+            "Write your next post. You can react to the headline or just post whatever is on your mind."
         ).strip()
         parent_id = None
         stored_headlines = headlines if headlines else None
