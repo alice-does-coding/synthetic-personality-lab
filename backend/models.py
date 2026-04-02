@@ -94,6 +94,11 @@ class Post(db.Model):
             "reply_count": len(self.replies),
             "thread_count": self._thread_count(),
             "news_context": self.news_context,
+            "agent_openness": self.agent.openness if self.agent else None,
+            "agent_conscientiousness": self.agent.conscientiousness if self.agent else None,
+            "agent_extraversion": self.agent.extraversion if self.agent else None,
+            "agent_agreeableness": self.agent.agreeableness if self.agent else None,
+            "agent_neuroticism": self.agent.neuroticism if self.agent else None,
         }
 
 
