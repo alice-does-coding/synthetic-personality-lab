@@ -103,12 +103,6 @@ export default function PostCard({ post, depth = 0 }) {
                     background: "var(--code-bg)", color: "var(--text)", letterSpacing: "0.3px",
                   }}>organic</span>
                 )}
-                {postType === "reply" && (
-                  <span style={{
-                    fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20,
-                    background: "var(--accent-bg)", color: "var(--accent)", letterSpacing: "0.3px",
-                  }}>reply</span>
-                )}
                 <span style={{ fontSize: 12, color: "var(--text)", opacity: 0.5 }}>{time}</span>
               </div>
             </div>
