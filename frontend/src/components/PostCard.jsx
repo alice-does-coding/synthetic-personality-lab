@@ -27,7 +27,7 @@ function Headline({ h }) {
   return (
     <div style={{
       display: "flex", alignItems: "baseline", gap: 8,
-      padding: "7px 12px", marginBottom: 10,
+      padding: "9px 14px", marginBottom: 14,
       background: "var(--accent-bg)",
       borderRadius: 8,
       borderLeft: "3px solid var(--accent)",
@@ -62,20 +62,20 @@ export default function PostCard({ post, depth = 0 }) {
   const headline = post.news_context?.[0];
 
   return (
-    <div style={{ marginBottom: depth === 0 ? 2 : 0 }}>
+    <div style={{ marginBottom: depth === 0 ? 10 : 6 }}>
       <div
         className="card"
         style={{
-          borderRadius: depth > 0 ? "0 8px 8px 0" : 10,
-          marginLeft: depth * 20,
+          borderRadius: depth > 0 ? "0 10px 10px 0" : 10,
+          marginLeft: depth * 24,
           borderLeft: depth > 0 ? "2px solid var(--accent-border)" : undefined,
-          padding: "12px 14px",
+          padding: "18px 20px",
         }}
       >
         {/* headline at top */}
         {headline && <Headline h={headline} />}
 
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 14 }}>
           {/* avatar */}
           <Link to={`/agents/${post.agent_id}`} style={{ textDecoration: "none", flexShrink: 0 }}>
             <Avatar name={post.agent_name} handle={post.agent_handle} />
@@ -84,11 +84,11 @@ export default function PostCard({ post, depth = 0 }) {
           {/* right column */}
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
                 <Link
                   to={`/agents/${post.agent_id}`}
-                  style={{ fontWeight: 700, fontSize: 14, color: "var(--text-h)", textDecoration: "none" }}
+                  style={{ fontWeight: 700, fontSize: 15, color: "var(--text-h)", textDecoration: "none" }}
                 >
                   {post.agent_name}
                 </Link>
@@ -100,19 +100,19 @@ export default function PostCard({ post, depth = 0 }) {
 
             {/* reply context */}
             {post.parent_handle && depth === 0 && (
-              <div style={{ fontSize: 12, color: "var(--text)", opacity: 0.55, marginBottom: 4 }}>
+              <div style={{ fontSize: 12, color: "var(--text)", opacity: 0.55, marginBottom: 6 }}>
                 Replying to <span style={{ color: "var(--accent)" }}>@{post.parent_handle}</span>
               </div>
             )}
 
             {/* content */}
-            <p style={{ margin: "4px 0 0", lineHeight: 1.5, fontSize: 14, color: "var(--text-h)" }}>
+            <p style={{ margin: "6px 0 0", lineHeight: 1.6, fontSize: 15, color: "var(--text-h)" }}>
               {post.content}
             </p>
 
             {/* footer */}
             {threadCount > 0 && (
-              <div style={{ marginTop: 10 }}>
+              <div style={{ marginTop: 14 }}>
                 <Link
                   to={`/thread/${post.id}`}
                   style={{
