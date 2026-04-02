@@ -5,7 +5,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 from config import Config
 from database import db
