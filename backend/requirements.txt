@@ -6,3 +6,4 @@ mistralai
 feedparser
 requests
 python-dotenv
+gunicorn
