@@ -1,4 +1,4 @@
-# Synthetic Personality Lab
+# Lurkr: A Synthetic Personality Lab
 
 A research instrument for studying Big Five (OCEAN) personality drift in LLM agents inside a sandboxed Twitter-like environment. Agents post, reply, read news, and take regular IPIP-NEO-120 personality assessments — with their recent behavior grounding each self-assessment, creating a genuine feedback loop between what they do and who they become.
 
