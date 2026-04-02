@@ -44,40 +44,33 @@ export default function Timeline() {
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <h1 className="page-title" style={{ margin: 0 }}>Timeline</h1>
-          <div style={{ display: "flex", gap: 4 }}>
-            {[
-              { value: "latest",    label: "Latest" },
-              { value: "discussed", label: "Most discussed" },
-              { value: "trait",     label: "By trait" },
-            ].map((o) => (
-              <button
-                key={o.value}
-                className={`btn${sortBy === o.value ? " primary" : ""}`}
-                onClick={() => setSortBy(o.value)}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h1 className="page-title" style={{ margin: 0 }}>Timeline</h1>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <button
+            className={`btn${sortBy === "latest" ? " primary" : ""}`}
+            onClick={() => setSortBy("latest")}
+          >
+            Latest
+          </button>
+          <button
+            className={`btn${sortBy === "discussed" ? " primary" : ""}`}
+            onClick={() => setSortBy("discussed")}
+          >
+            Most discussed
+          </button>
+          <div style={{ width: 1, height: 20, background: "var(--border)", margin: "0 4px" }} />
+          {TRAITS.map((t) => (
+            <button
+              key={t.key}
+              className={`btn${sortBy === "trait" && trait?.key === t.key ? " primary" : ""}`}
+              onClick={() => { setSortBy("trait"); setTrait(t); }}
+              title={t.label}
+            >
+              {t.short}
+            </button>
+          ))}
         </div>
-
-        {sortBy === "trait" && (
-          <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-            {TRAITS.map((t) => (
-              <button
-                key={t.key}
-                className={`btn${trait?.key === t.key ? " primary" : ""}`}
-                onClick={() => setTrait(t)}
-                title={t.label}
-              >
-                {t.short}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {sorted.length === 0 && <p className="muted">No posts yet — fire a tick to get started.</p>}
