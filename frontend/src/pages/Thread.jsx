@@ -208,16 +208,9 @@ export default function Thread() {
         ← Timeline
       </Link>
       <div style={{ margin: "16px 0 24px", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <div>
-          <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text-h)" }}>
-            @{root?.agent_handle}
-          </span>
-          <span style={{ fontSize: 15, color: "var(--text)", marginLeft: 10 }}>
-            {root?.agent_name}
-          </span>
-        </div>
+        <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text-h)" }}>Comments</span>
         <span className="muted" style={{ fontSize: 13 }}>
-          {replyCount === 0 ? "no replies yet" : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+          {replyCount === 0 ? "no comments yet" : `${replyCount} ${replyCount === 1 ? "comment" : "comments"}`}
         </span>
       </div>
       <div>
