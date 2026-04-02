@@ -19,8 +19,8 @@ run:
 	cd nlp && . venv/bin/activate && python3.11 server.py &
 	@echo "Starting backend..."
 	cd backend && . venv/bin/activate && python3.11 app.py &
-	@echo "Starting frontend..."
-	cd frontend && npm run dev
+	@echo "Starting frontend... (Ctrl+C then 'make stop' to kill all)"
+	cd frontend && npm run dev; make stop
 
 nlp:
 	cd nlp && . venv/bin/activate && python3.11 server.py
