@@ -1,51 +1,32 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api";
 
-
-function NewsContext({ headlines }) {
-  const [open, setOpen] = useState(false);
+function Headline({ headlines }) {
+  const h = headlines[0];
   return (
-    <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          background: "none", border: "none", padding: 0, cursor: "pointer",
-          fontSize: 11, fontWeight: 600, color: "var(--text)",
-          textTransform: "uppercase", letterSpacing: "0.5px", display: "flex",
-          alignItems: "center", gap: 4,
-        }}
-      >
-        <span style={{ fontSize: 10 }}>{open ? "▾" : "▸"}</span>
-        News context · {headlines.length} {headlines.length === 1 ? "headline" : "headlines"}
-      </button>
-      {open && (
-        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-          {headlines.map((h, i) => (
-            <div key={i} style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
-              <span style={{
-                fontSize: 10, fontWeight: 700, color: "var(--accent)",
-                whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.4px",
-              }}>
-                {h.source} · {h.category}
-              </span>
-              {h.url ? (
-                <a
-                  href={h.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 12, color: "var(--text-h)", lineHeight: 1.4 }}
-                >
-                  {h.title}
-                </a>
-              ) : (
-                <span style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.4 }}>
-                  {h.title}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+    <div style={{
+      margin: "10px 0 0 0",
+      padding: "8px 10px",
+      borderLeft: "3px solid var(--accent)",
+      background: "var(--bg)",
+      borderRadius: "0 6px 6px 0",
+    }}>
+      <div style={{
+        fontSize: 10, fontWeight: 700, color: "var(--accent)",
+        textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3,
+      }}>
+        {h.source} · {h.category}
+      </div>
+      {h.url ? (
+        <a
+          href={h.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ fontSize: 12, color: "var(--text-h)", lineHeight: 1.4, textDecoration: "none" }}
+        >
+          {h.title}
+        </a>
+      ) : (
+        <span style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.4 }}>{h.title}</span>
       )}
     </div>
   );
@@ -55,6 +36,8 @@ export default function PostCard({ post, depth = 0 }) {
   const time = new Date(post.created_at).toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit",
   });
+
+  const threadCount = post.thread_count ?? post.reply_count ?? 0;
 
   return (
     <div style={{ marginBottom: depth === 0 ? 10 : 6 }}>
@@ -85,26 +68,33 @@ export default function PostCard({ post, depth = 0 }) {
           </span>
         </div>
 
+        {/* reply context */}
+        {post.parent_handle && depth === 0 && (
+          <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 6, opacity: 0.6 }}>
+            ↩ replying to @{post.parent_handle}
+          </div>
+        )}
+
         {/* content */}
         <p style={{ margin: 0, lineHeight: 1.55, fontSize: 15 }}>{post.content}</p>
 
-        {/* news context */}
+        {/* headline */}
         {post.news_context && post.news_context.length > 0 && (
-          <NewsContext headlines={post.news_context} />
+          <Headline headlines={post.news_context} />
         )}
 
         {/* footer */}
-        {post.reply_count > 0 && (
-          <Link
-            to={`/thread/${post.id}`}
-            style={{ display: "inline-block", marginTop: 10, fontSize: 12, textDecoration: "none" }}
-            className="btn"
-          >
-            💬 {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
-          </Link>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10 }}>
+          {threadCount > 0 && (
+            <Link
+              to={`/thread/${post.id}`}
+              style={{ fontSize: 12, textDecoration: "none", color: "var(--text)", opacity: 0.7 }}
+            >
+              💬 {threadCount} {threadCount === 1 ? "comment" : "comments"}
+            </Link>
+          )}
+        </div>
       </div>
-
     </div>
   );
 }

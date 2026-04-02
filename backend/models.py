@@ -73,6 +73,12 @@ class Post(db.Model):
         lazy=True,
     )
 
+    def _thread_count(self):
+        count = 0
+        for reply in self.replies:
+            count += 1 + reply._thread_count()
+        return count
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -86,6 +92,7 @@ class Post(db.Model):
             "parent_handle": self.parent.agent.handle if self.parent and self.parent.agent else None,
             "parent_content": self.parent.content if self.parent else None,
             "reply_count": len(self.replies),
+            "thread_count": self._thread_count(),
             "news_context": self.news_context,
         }
 
