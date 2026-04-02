@@ -69,14 +69,19 @@ function ThreadPost({ post, descendants, isCollapsed, onToggle }) {
             onClick={onToggle}
             title={isCollapsed ? "Expand replies" : "Collapse replies"}
             style={{
-              flex: 1, width: 2, marginTop: 6, minHeight: 20,
-              background: isCollapsed ? "var(--accent-border)" : "var(--border)",
-              cursor: "pointer", borderRadius: 2,
-              transition: "background 0.15s",
+              flex: 1, width: 20, marginTop: 6, minHeight: 20,
+              display: "flex", justifyContent: "center",
+              cursor: "pointer", padding: "0 9px", boxSizing: "border-box",
             }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--accent)"}
-            onMouseLeave={e => e.currentTarget.style.background = isCollapsed ? "var(--accent-border)" : "var(--border)"}
-          />
+            onMouseEnter={e => e.currentTarget.firstChild.style.background = "var(--accent)"}
+            onMouseLeave={e => e.currentTarget.firstChild.style.background = isCollapsed ? "var(--accent-border)" : "var(--border)"}
+          >
+            <div style={{
+              width: 2, height: "100%", borderRadius: 2,
+              background: isCollapsed ? "var(--accent-border)" : "var(--border)",
+              transition: "background 0.15s",
+            }} />
+          </div>
         )}
       </div>
 
