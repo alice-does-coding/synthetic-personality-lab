@@ -42,6 +42,16 @@ export default function SimControls() {
       <button className="btn" disabled={loading} onClick={() => handle(api.simTick)}>
         ↪ Tick
       </button>
+      <button className="btn" disabled={loading} onClick={() => handle(api.simAssess)}
+        title={status ? `~${Math.ceil(status.agents_per_tick / status.rate_limit)}s for ${status.agents_per_tick} agents` : ""}
+      >
+        📊 Assess
+        {status && (
+          <span className="muted" style={{ fontSize: 11, marginLeft: 5 }}>
+            ~{Math.ceil(status.agents_per_tick / status.rate_limit)}s
+          </span>
+        )}
+      </button>
     </div>
   );
 }

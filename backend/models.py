@@ -51,6 +51,7 @@ class Agent(db.Model):
                 "agreeableness": self.agreeableness,
                 "neuroticism": self.neuroticism,
             },
+            "snapshot_count": len(self.snapshots),
         }
 
 
@@ -82,8 +83,38 @@ class Post(db.Model):
             "tick_number": self.tick_number,
             "created_at": self.created_at.isoformat(),
             "parent_id": self.parent_id,
+            "parent_handle": self.parent.agent.handle if self.parent and self.parent.agent else None,
+            "parent_content": self.parent.content if self.parent else None,
             "reply_count": len(self.replies),
             "news_context": self.news_context,
+        }
+
+
+class NewsItem(db.Model):
+    """A unique headline seen by at least one agent, with semantic analysis."""
+    __tablename__ = "news_items"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    url        = db.Column(db.String(500), unique=True, nullable=False)
+    title      = db.Column(db.Text, nullable=False)
+    source     = db.Column(db.String(100))
+    category   = db.Column(db.String(100))
+    sentiment  = db.Column(db.Float,   nullable=True)   # -1.0 (negative) → 1.0 (positive)
+    emotion    = db.Column(db.String(50), nullable=True) # e.g. "anxiety", "hope", "outrage"
+    analyzed   = db.Column(db.Boolean, default=False, nullable=False)
+    first_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id":           self.id,
+            "url":          self.url,
+            "title":        self.title,
+            "source":       self.source,
+            "category":     self.category,
+            "sentiment":    self.sentiment,
+            "emotion":      self.emotion,
+            "analyzed":     self.analyzed,
+            "first_seen_at": self.first_seen_at.isoformat(),
         }
 
 

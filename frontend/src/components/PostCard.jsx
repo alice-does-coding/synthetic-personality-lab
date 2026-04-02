@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 
+
 function NewsContext({ headlines }) {
   const [open, setOpen] = useState(false);
   return (
@@ -51,22 +52,9 @@ function NewsContext({ headlines }) {
 }
 
 export default function PostCard({ post, depth = 0 }) {
-  const [replies, setReplies]       = useState(null);
-  const [loadingReplies, setLoading] = useState(false);
-
   const time = new Date(post.created_at).toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit",
   });
-
-  const toggleReplies = async () => {
-    if (replies !== null) { setReplies(null); return; }
-    setLoading(true);
-    try {
-      setReplies(await api.replies(post.id));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div style={{ marginBottom: depth === 0 ? 10 : 6 }}>
@@ -106,26 +94,17 @@ export default function PostCard({ post, depth = 0 }) {
         )}
 
         {/* footer */}
-        {depth === 0 && post.reply_count > 0 && (
-          <button
-            onClick={toggleReplies}
+        {post.reply_count > 0 && (
+          <Link
+            to={`/thread/${post.id}`}
+            style={{ display: "inline-block", marginTop: 10, fontSize: 12, textDecoration: "none" }}
             className="btn"
-            style={{ marginTop: 10, fontSize: 12, padding: "3px 10px" }}
-            disabled={loadingReplies}
           >
-            {loadingReplies
-              ? "Loading…"
-              : replies
-              ? "Hide replies"
-              : `💬 ${post.reply_count} ${post.reply_count === 1 ? "reply" : "replies"}`}
-          </button>
+            💬 {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
+          </Link>
         )}
       </div>
 
-      {/* inline replies */}
-      {replies && replies.map((r) => (
-        <PostCard key={r.id} post={r} depth={depth + 1} />
-      ))}
     </div>
   );
 }

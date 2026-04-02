@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
@@ -54,6 +56,31 @@ def get_personality_history(agent_id):
         .all()
     )
     return jsonify([s.to_dict() for s in snapshots])
+
+
+@agents_bp.route("/population", methods=["GET"])
+def population_drift():
+    """Average OCEAN scores across all agents per tick, for population-level drift chart."""
+    snapshots = PersonalitySnapshot.query.order_by(PersonalitySnapshot.tick_number).all()
+
+    by_tick = defaultdict(list)
+    for s in snapshots:
+        by_tick[s.tick_number].append(s)
+
+    result = []
+    for tick, snaps in sorted(by_tick.items()):
+        n = len(snaps)
+        result.append({
+            "tick_number":       tick,
+            "openness":          sum(s.openness          for s in snaps) / n,
+            "conscientiousness": sum(s.conscientiousness for s in snaps) / n,
+            "extraversion":      sum(s.extraversion      for s in snaps) / n,
+            "agreeableness":     sum(s.agreeableness     for s in snaps) / n,
+            "neuroticism":       sum(s.neuroticism       for s in snaps) / n,
+            "agent_count":       n,
+        })
+
+    return jsonify(result)
 
 
 @agents_bp.route("/<int:follower_id>/follow/<int:followee_id>", methods=["POST"])

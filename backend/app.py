@@ -1,6 +1,8 @@
+import threading
+import time
+
 from flask import Flask
 from flask_cors import CORS
-from apscheduler.schedulers.background import BackgroundScheduler
 
 from config import Config
 from database import init_db
@@ -16,26 +18,25 @@ def create_app(config_class=Config):
     from routes.agents import agents_bp
     from routes.posts import posts_bp
     from routes.sim import sim_bp
+    from routes.news import news_bp
+    from routes.nlp import nlp_bp
 
     app.register_blueprint(agents_bp, url_prefix="/api/agents")
     app.register_blueprint(posts_bp, url_prefix="/api/posts")
     app.register_blueprint(sim_bp, url_prefix="/api/sim")
+    app.register_blueprint(news_bp, url_prefix="/api/news")
+    app.register_blueprint(nlp_bp, url_prefix="/api/nlp")
 
-    scheduler = BackgroundScheduler(daemon=True)
-
-    def _tick():
+    def _tick_loop():
         from simulation import run_tick
-        run_tick(app)
+        while True:
+            run_tick(app)
+            time.sleep(app.config["SIMULATION_TICK_SECONDS"])
 
-    scheduler.add_job(
-        func=_tick,
-        trigger="interval",
-        seconds=app.config["SIMULATION_TICK_SECONDS"],
-        id="simulation_tick",
-        replace_existing=True,
-    )
-    scheduler.start()
-    app.scheduler = scheduler
+    threading.Thread(target=_tick_loop, daemon=True).start()
+
+    from simulation import start_news_analyzer
+    start_news_analyzer(app)
 
     return app
 

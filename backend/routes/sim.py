@@ -8,10 +8,13 @@ sim_bp = Blueprint("sim", __name__)
 
 @sim_bp.route("/status", methods=["GET"])
 def status():
+    from config import Config
     state = SimState.get()
     return jsonify({
         "current_tick": state.current_tick,
         "is_running": state.is_running,
+        "agents_per_tick": Config.AGENTS_PER_TICK,
+        "rate_limit": Config.MISTRAL_RATE_LIMIT,
     })
 
 
@@ -38,3 +41,13 @@ def manual_tick():
     run_tick(current_app._get_current_object(), force=True)
     state = SimState.get()
     return jsonify({"ok": True, "current_tick": state.current_tick})
+
+
+@sim_bp.route("/assess", methods=["POST"])
+def manual_assess():
+    """Kick off a full IPIP assessment in the background and return immediately."""
+    import threading
+    from simulation import run_tick
+    app = current_app._get_current_object()
+    threading.Thread(target=run_tick, kwargs={"app": app, "force": True, "force_ipip": True}, daemon=True).start()
+    return jsonify({"ok": True, "message": "assessment started"})

@@ -1,6 +1,8 @@
 import logging
 import random
 import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from mistralai.client import Mistral
@@ -8,16 +10,72 @@ from mistralai.client import Mistral
 from config import Config
 from database import db
 from ipip import ITEMS, score_responses
-from models import Agent, IpipResponse, PersonalitySnapshot, Post, SimState
+from models import Agent, IpipResponse, NewsItem, PersonalitySnapshot, Post, SimState
 from news import get_headlines_for_agent
 
 logger = logging.getLogger(__name__)
 
+# ── Rate limiter + retry (Mistral free tier: 1 req/sec) ──────────────────────
+
+_rl_lock = threading.Lock()
+_rl_next = 0.0  # monotonic time when next call is allowed
+
+
+def _mistral_chat(client, messages, max_tokens, temperature):
+    """Call Mistral with proactive throttling + exponential-backoff retry on 429."""
+    global _rl_next
+    max_retries = 6
+    for attempt in range(max_retries):
+        # Proactive throttle: serialise all threads through a 1/sec gate
+        with _rl_lock:
+            now = time.monotonic()
+            wait = _rl_next - now
+            if wait > 0:
+                time.sleep(wait)
+            _rl_next = time.monotonic() + (1.0 / Config.MISTRAL_RATE_LIMIT)
+
+        try:
+            return client.chat.complete(
+                model=Config.MISTRAL_MODEL,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+        except Exception as exc:
+            is_rate_limit = "429" in repr(exc) or "rate" in str(exc).lower()
+            if is_rate_limit and attempt < max_retries - 1:
+                backoff = 2 ** attempt  # 1 s, 2 s, 4 s, 8 s, 16 s, 32 s
+                logger.warning("429 rate-limited (attempt %d/%d) — backing off %ds",
+                               attempt + 1, max_retries, backoff)
+                time.sleep(backoff)
+            else:
+                raise
+
+# ── Tick overlap guard ────────────────────────────────────────────────────────
+_tick_running = False
+_tick_lock = threading.Lock()
+
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def run_tick(app, force=False):
+def run_tick(app, force=False, force_ipip=False):
     """Advance the simulation by one tick. Called by APScheduler."""
+    global _tick_running
+    with _tick_lock:
+        if _tick_running:
+            logger.warning("tick skipped — previous tick still running")
+            return
+        _tick_running = True
+    try:
+        _run_tick_inner(app, force=force, force_ipip=force_ipip)
+    except Exception:
+        logger.exception("tick crashed")
+    finally:
+        with _tick_lock:
+            _tick_running = False
+
+
+def _run_tick_inner(app, force=False, force_ipip=False):
     with app.app_context():
         state = SimState.get()
         if not state.is_running and not force:
@@ -28,7 +86,7 @@ def run_tick(app, force=False):
 
         all_agents = Agent.query.filter_by(is_active=True).all()
         agents = random.sample(all_agents, min(Config.AGENTS_PER_TICK, len(all_agents)))
-        do_ipip = (tick % Config.REASSESSMENT_INTERVAL == 0)
+        do_ipip = force_ipip or (tick % Config.REASSESSMENT_INTERVAL == 0)
 
         # Snapshot data needed by worker threads before we leave the main session
         agent_snapshots = [_agent_snapshot(a) for a in agents]
@@ -62,13 +120,22 @@ def run_tick(app, force=False):
                         parent_id=parent_id,
                         news_context=news_context,
                     ))
+                    # Register any new headlines for semantic analysis
+                    if news_context:
+                        for h in news_context:
+                            if h.get("url") and not NewsItem.query.filter_by(url=h["url"]).first():
+                                db.session.add(NewsItem(
+                                    url=h["url"], title=h["title"],
+                                    source=h.get("source"), category=h.get("category"),
+                                ))
 
-        # ── IPIP assessment (all agents in parallel, only every N ticks) ──────
+        # ── IPIP assessment (all active agents) ──────────────────────────────────
         if do_ipip:
-            logger.info("tick %d: running IPIP assessments for all agents", tick)
+            logger.info("tick %d: running IPIP assessments for all %d agents", tick, len(all_agents))
+            all_ipip_snaps = [_ipip_snapshot(a) for a in all_agents]
             ipip_results = {}
             with ThreadPoolExecutor(max_workers=Config.IPIP_WORKERS) as pool:
-                futures = {pool.submit(ipip_worker, s): s["id"] for s in agent_snapshots}
+                futures = {pool.submit(ipip_worker, s): s["id"] for s in all_ipip_snaps}
                 for future in as_completed(futures):
                     agent_id = futures[future]
                     try:
@@ -106,7 +173,30 @@ def run_tick(app, force=False):
         logger.info("tick %d complete", tick)
 
 
-# ── Agent snapshot (thread-safe plain dict, no SQLAlchemy object) ─────────────
+# ── Agent snapshots ───────────────────────────────────────────────────────────
+
+def _ipip_snapshot(agent):
+    """Lightweight snapshot for IPIP — includes recent posts for self-assessment grounding."""
+    recent = (
+        Post.query
+        .filter_by(agent_id=agent.id)
+        .order_by(Post.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    return {
+        "id":                agent.id,
+        "name":              agent.name,
+        "handle":            agent.handle,
+        "bio":               agent.bio,
+        "openness":          agent.openness,
+        "conscientiousness": agent.conscientiousness,
+        "extraversion":      agent.extraversion,
+        "agreeableness":     agent.agreeableness,
+        "neuroticism":       agent.neuroticism,
+        "recent_posts":      [p.content for p in recent],
+    }
+
 
 def _agent_snapshot(agent):
     """Serialize agent state to a plain dict so worker threads don't touch the ORM."""
@@ -126,7 +216,7 @@ def _agent_snapshot(agent):
     )
     # 40% chance to reply to a random post from the feed (if any exist)
     reply_to = None
-    if feed and random.random() < 0.4:
+    if feed and random.random() < 0.70:
         target = random.choice(feed)
         reply_to = {"id": target.id, "handle": target.agent.handle, "content": target.content}
 
@@ -142,7 +232,8 @@ def _agent_snapshot(agent):
         "neuroticism":       agent.neuroticism,
         "feed":     [{"handle": p.agent.handle, "content": p.content} for p in feed],
         "reply_to": reply_to,
-        "headlines": get_headlines_for_agent(
+        # Don't inject new headlines into replies — replies should respond to the post, not the news
+        "headlines": [] if reply_to else get_headlines_for_agent(
             {"openness": agent.openness, "conscientiousness": agent.conscientiousness,
              "extraversion": agent.extraversion, "agreeableness": agent.agreeableness,
              "neuroticism": agent.neuroticism},
@@ -249,8 +340,8 @@ def _generate_post(snap):
         ).strip()
         parent_id = None
 
-    resp = client.chat.complete(
-        model=Config.MISTRAL_MODEL,
+    resp = _mistral_chat(
+        client,
         messages=[
             {"role": "system", "content": _build_system_prompt(snap)},
             {"role": "user",   "content": user_prompt},
@@ -266,15 +357,28 @@ def _generate_post(snap):
 def _run_ipip_assessment(snap):
     client = _mistral_client()
     items_block = "\n".join(f"{item['number']}. {item['text']}" for item in ITEMS)
+
+    recent_posts = snap.get("recent_posts", [])
+    if recent_posts:
+        posts_block = "\n".join(f'- "{p}"' for p in recent_posts)
+        context = (
+            f"Here are your recent posts on Lurkr:\n{posts_block}\n\n"
+            "Reflect on how you've actually been thinking, feeling, and behaving based on those posts. "
+            "Then rate how accurately each statement below describes you — let your recent behavior guide your answers, "
+            "not just how you'd like to see yourself.\n\n"
+        )
+    else:
+        context = ""
+
     user_prompt = (
-        "Rate how accurately each statement describes you.\n"
+        f"{context}"
         "Scale: 1 = Very Inaccurate, 2 = Moderately Inaccurate, "
         "3 = Neither, 4 = Moderately Accurate, 5 = Very Accurate\n\n"
         "Reply with ONLY a comma-separated list of 120 integers (e.g. 3,4,2,5,1,...).\n\n"
         f"Statements:\n{items_block}"
     )
-    resp = client.chat.complete(
-        model=Config.MISTRAL_MODEL,
+    resp = _mistral_chat(
+        client,
         messages=[
             {"role": "system", "content": _build_system_prompt(snap)},
             {"role": "user",   "content": user_prompt},
@@ -286,14 +390,69 @@ def _run_ipip_assessment(snap):
     scores = _parse_ipip_response(raw, snap["id"])
     if scores is None:
         return None
-    big_five = score_responses({i + 1: scores[i] for i in range(120)})
+    big_five = score_responses({i + 1: scores[i] for i in range(len(scores))})
     return scores, big_five
 
 
 def _parse_ipip_response(raw, agent_id):
     # Extract all integers from the response — tolerates preamble/postamble text
     scores = [int(x) for x in re.findall(r"\b[1-5]\b", raw)]
-    if len(scores) != 120:
-        logger.warning("Agent %d returned %d IPIP scores (expected 120)", agent_id, len(scores))
+    n = len(scores)
+    if n < 60:
+        logger.warning("Agent %d returned only %d IPIP scores — too few to score", agent_id, n)
         return None
+    if n > 120:
+        scores = scores[:120]
+    if n != 120:
+        logger.info("Agent %d returned %d/120 IPIP scores — scoring proportionally", agent_id, n)
     return scores
+
+
+# ── News semantic analysis ────────────────────────────────────────────────────
+
+def _call_nlp_service(text):
+    """Call the local NLP microservice. Returns (sentiment_score, emotion_label) or None."""
+    import urllib.request, json as _json
+    payload = _json.dumps({"text": text}).encode()
+    req = urllib.request.Request(
+        Config.NLP_SERVICE_URL + "/analyze",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = _json.loads(resp.read())
+    sentiment = data["sentiment"]["score"]
+    emotion   = data["emotion"]["label"]
+    return sentiment, emotion
+
+
+def _analyze_news_item(item_id, title, app):
+    """Run sentiment + emotion analysis on a single headline via the NLP service."""
+    with app.app_context():
+        try:
+            sentiment, emotion = _call_nlp_service(title)
+            item = NewsItem.query.get(item_id)
+            if item:
+                item.sentiment = sentiment
+                item.emotion   = emotion
+                item.analyzed  = True
+                db.session.commit()
+                logger.info("news analyzed — %s → sentiment:%.2f emotion:%s", title[:50], sentiment, emotion)
+        except Exception:
+            logger.exception("news analysis failed for item %d", item_id)
+
+
+def start_news_analyzer(app):
+    """Background thread: analyze unanalyzed news items as they accumulate."""
+    def loop():
+        while True:
+            time.sleep(30)
+            with app.app_context():
+                unanalyzed = NewsItem.query.filter_by(analyzed=False).limit(5).all()
+                items = [(i.id, i.title) for i in unanalyzed]
+            for item_id, title in items:
+                _analyze_news_item(item_id, title, app)
+
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()

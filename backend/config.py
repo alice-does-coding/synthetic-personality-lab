@@ -9,14 +9,17 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///lab.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-    MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "ministral-3b-latest")
-    SIMULATION_TICK_SECONDS = int(os.getenv("SIMULATION_TICK_SECONDS", 10))
+    MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
+    SIMULATION_TICK_SECONDS = int(os.getenv("SIMULATION_TICK_SECONDS", 30))
     FEED_SAMPLE_SIZE = int(os.getenv("FEED_SAMPLE_SIZE", 10))
     # Agents sampled per tick — keeps API calls manageable
-    AGENTS_PER_TICK = int(os.getenv("AGENTS_PER_TICK", 25))
-    # Concurrency for post generation
-    MAX_WORKERS = int(os.getenv("MAX_WORKERS", 20))
-    # Concurrency for IPIP assessments (lower — prompts are huge)
-    IPIP_WORKERS = int(os.getenv("IPIP_WORKERS", 5))
+    AGENTS_PER_TICK = int(os.getenv("AGENTS_PER_TICK", 10))
+    # Concurrency caps — with rate limiting, extra threads just sleep; keep low
+    MAX_WORKERS = int(os.getenv("MAX_WORKERS", 3))
+    IPIP_WORKERS = int(os.getenv("IPIP_WORKERS", 3))
     # Number of simulation ticks between full IPIP-NEO-120 re-assessments
     REASSESSMENT_INTERVAL = int(os.getenv("REASSESSMENT_INTERVAL", 10))
+    # Paid tier can go much higher — tune via env var if you hit limits
+    MISTRAL_RATE_LIMIT = float(os.getenv("MISTRAL_RATE_LIMIT", 5.0))
+    # Local NLP microservice
+    NLP_SERVICE_URL = os.getenv("NLP_SERVICE_URL", "http://localhost:5001")
