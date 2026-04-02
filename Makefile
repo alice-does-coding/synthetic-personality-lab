@@ -41,4 +41,6 @@ stop:
 	@pkill -f "python3.11 server.py" 2>/dev/null || true
 	@pkill -f "python3.11 app.py" 2>/dev/null || true
 	@pkill -f "vite" 2>/dev/null || true
+	@lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+	@lsof -ti :5001 | xargs kill -9 2>/dev/null || true
 	@echo "All services stopped."
