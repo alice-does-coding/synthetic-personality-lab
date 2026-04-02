@@ -1,4 +1,4 @@
-.PHONY: setup run stop nlp backend frontend
+.PHONY: setup run stop nlp backend frontend reset
 
 setup:
 	@echo "Setting up backend..."
@@ -30,6 +30,12 @@ backend:
 
 frontend:
 	cd frontend && npm run dev
+
+reset:
+	@echo "Nuking database..."
+	rm -f backend/instance/lab.db
+	@echo "Reseeding..."
+	cd backend && . venv/bin/activate && python3.11 seed.py
 
 stop:
 	@pkill -f "python3.11 server.py" 2>/dev/null || true
