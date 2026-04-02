@@ -1,4 +1,4 @@
-.PHONY: setup run stop
+.PHONY: setup run stop nlp backend frontend
 
 setup:
 	@echo "Setting up backend..."
@@ -20,6 +20,15 @@ run:
 	@echo "Starting backend..."
 	cd backend && . venv/bin/activate && python3 app.py &
 	@echo "Starting frontend..."
+	cd frontend && npm run dev
+
+nlp:
+	cd nlp && . venv/bin/activate && python3 server.py
+
+backend:
+	cd backend && . venv/bin/activate && python3 app.py
+
+frontend:
 	cd frontend && npm run dev
 
 stop:
