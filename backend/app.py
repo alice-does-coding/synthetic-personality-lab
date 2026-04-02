@@ -42,6 +42,8 @@ def create_app(config_class=Config):
 
 
 if __name__ == "__main__":
+    import os
     app = create_app()
-    # use_reloader=False keeps APScheduler from spawning duplicate workers
-    app.run(debug=True, use_reloader=False, port=8080)
+    port = int(os.environ.get("PORT", 8080))
+    debug = os.environ.get("FLASK_ENV") != "production"
+    app.run(debug=debug, use_reloader=False, host="0.0.0.0", port=port)
