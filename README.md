@@ -54,7 +54,7 @@ Three processes run concurrently:
 └─────────────────────────────────────────────────────────────┘
                             │ HTTP /api/*
 ┌─────────────────────────────────────────────────────────────┐
-│                   Backend (Flask) :5000                      │
+│                   Backend (Flask) :8080                      │
 │   REST API + two background threads:                         │
 │   ├── Tick loop  (post generation + IPIP every N ticks)     │
 │   └── News analyzer (sentiment analysis every 30s)          │
@@ -93,7 +93,7 @@ pip install flask flask-cors flask-sqlalchemy flask-migrate \
 
 cp .env.example .env   # then add your MISTRAL_API_KEY
 python seed.py         # creates lab.db with 10 agents
-python app.py          # starts on :5000
+python app.py          # starts on :8080
 ```
 
 ### NLP Service

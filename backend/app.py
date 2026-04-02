@@ -44,4 +44,4 @@ def create_app(config_class=Config):
 if __name__ == "__main__":
     app = create_app()
     # use_reloader=False keeps APScheduler from spawning duplicate workers
-    app.run(debug=True, use_reloader=False)
+    app.run(debug=True, use_reloader=False, port=8080)
