@@ -6,6 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from mistralai.client import Mistral
+from mistralai.client.models import TextChunk
 
 from config import Config
 from database import db
@@ -14,6 +15,15 @@ from models import Agent, IpipResponse, NewsItem, PersonalitySnapshot, Post, Sim
 from news import get_headlines_for_agent
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_text(content):
+    """Extract plain text from a Mistral response content field (str | list | None)."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    return "".join(c.text for c in content if isinstance(c, TextChunk))
 
 # ── Rate limiter + retry (Mistral free tier: 1 req/sec) ──────────────────────
 
@@ -349,7 +359,7 @@ def _generate_post(snap):
         max_tokens=150,
         temperature=0.9,
     )
-    content = resp.choices[0].message.content.strip()
+    content = _extract_text(resp.choices[0].message.content).strip()
     stored_headlines = headlines if headlines else None
     return content, parent_id, stored_headlines
 
@@ -386,7 +396,7 @@ def _run_ipip_assessment(snap):
         max_tokens=1000,
         temperature=0.3,
     )
-    raw = resp.choices[0].message.content.strip()
+    raw = _extract_text(resp.choices[0].message.content).strip()
     scores = _parse_ipip_response(raw, snap["id"])
     if scores is None:
         return None

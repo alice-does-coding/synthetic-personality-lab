@@ -1,13 +1,16 @@
 """
 Seed the database with agents with fully randomised Big Five scores.
-Bios are generated from the scores — no archetype labels.
+Bios are LLM-generated from the raw score vector — no templates, no archetype labels.
 
 Usage:
     python seed.py
 """
 import random
 from app import create_app
+from config import Config
 from database import db
+from mistralai.client import Mistral
+from mistralai.client.models import TextChunk
 from models import Agent, Follow
 
 random.seed(42)
@@ -31,90 +34,53 @@ LAST_NAMES = [
     "Okafor","Petrov","Quintero","Rashid",
 ]
 
-_BIO_PARTS = {
-    "O_high": [
-        "probably thinking about something you've never heard of",
-        "connects dots that weren't supposed to connect",
-        "living in the hypotheticals",
-        "gets distracted by ideas mid-sentence",
-        "brain permanently in tangent mode",
-    ],
-    "O_low": [
-        "no-nonsense",
-        "says what it is",
-        "not here for your metaphors",
-        "keeps it concrete",
-        "straight talker, zero fluff",
-    ],
-    "C_high": [
-        "never misses a deadline",
-        "has a system for everything",
-        "inbox zero is a lifestyle",
-        "reliable to a fault",
-        "the one who actually reads the manual",
-    ],
-    "C_low": [
-        "winging it professionally",
-        "future plans: tbd",
-        "chaos is a lifestyle",
-        "definitely forgot something",
-        "organized by vibes",
-    ],
-    "E_high": [
-        "will talk to anyone",
-        "loudest person in the room",
-        "social battery: always charged",
-        "loves a crowd",
-        "has never eaten lunch alone by choice",
-    ],
-    "E_low": [
-        "better in text",
-        "do not disturb",
-        "chronically online, rarely social",
-        "replies eventually",
-        "presence optional",
-    ],
-    "A_high": [
-        "genuinely cares",
-        "softie",
-        "here if you need to talk",
-        "community > clout",
-        "remembers your birthday without being reminded",
-    ],
-    "A_low": [
-        "not here to be liked",
-        "says what others won't",
-        "zero patience for nonsense",
-        "you've been warned",
-        "diplomatically immune",
-    ],
-    "N_high": [
-        "anxious but posting",
-        "catastrophising professionally",
-        "it's giving spiral",
-        "definitely fine (not fine)",
-        "overthinks everything, posts about it anyway",
-    ],
-    "N_low": [
-        "unbothered",
-        "nothing phases me",
-        "emotionally stable (allegedly)",
-        "zen as hell",
-        "crisis? what crisis",
-    ],
-}
+
+def _trait_description(score, high, low):
+    """Convert a 0–100 score to a plain-English intensity phrase."""
+    if score >= 80:
+        return f"very {high}"
+    elif score >= 60:
+        return high
+    elif score >= 40:
+        return f"neither strongly {high} nor {low}"
+    elif score >= 20:
+        return low
+    else:
+        return f"very {low}"
 
 
-def generate_bio(o, c, e, a, n):
-    scores = {"O": o, "C": c, "E": e, "A": a, "N": n}
-    ranked = sorted(scores.items(), key=lambda x: abs(x[1] - 50), reverse=True)
-    parts = []
-    for trait, score in ranked[:2]:
-        level = "high" if score >= 50 else "low"
-        key = f"{trait}_{level}"
-        if key in _BIO_PARTS:
-            parts.append(random.choice(_BIO_PARTS[key]))
-    return ". ".join(parts) + "." if parts else "just here."
+def generate_bio(name, handle, o, c, e, a, n):
+    """Call Mistral to write a short, neutral first-person bio from raw scores."""
+    client = Mistral(api_key=Config.MISTRAL_API_KEY)
+
+    trait_summary = (
+        f"- Openness to experience: {_trait_description(o, 'imaginative and curious', 'practical and conventional')}\n"
+        f"- Conscientiousness: {_trait_description(c, 'organised and disciplined', 'spontaneous and flexible')}\n"
+        f"- Extraversion: {_trait_description(e, 'outgoing and energetic', 'reserved and quiet')}\n"
+        f"- Agreeableness: {_trait_description(a, 'warm and cooperative', 'direct and competitive')}\n"
+        f"- Emotional reactivity: {_trait_description(n, 'emotionally sensitive and reactive', 'calm and stable')}"
+    )
+
+    prompt = (
+        f"You are writing a short Twitter/social media bio for a person named {name} (@{handle}).\n\n"
+        f"Their personality traits are:\n{trait_summary}\n\n"
+        "Write a 1–2 sentence first-person bio that feels authentic to this person. "
+        "Do not mention personality traits, psychology, or the Big Five by name. "
+        "Do not use the words 'introvert', 'extrovert', 'anxious', 'neurotic', 'agreeable', 'conscientious', or 'openness'. "
+        "Write as if this person wrote their own bio — casual, specific, a little idiosyncratic. "
+        "No hashtags. No emojis. Return only the bio text, nothing else."
+    )
+
+    resp = client.chat.complete(
+        model=Config.MISTRAL_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=80,
+        temperature=0.95,
+    )
+    content = resp.choices[0].message.content
+    if isinstance(content, list):
+        content = "".join(c.text for c in content if isinstance(c, TextChunk))
+    return (content or "").strip().strip('"')
 
 
 def rand_score():
@@ -139,7 +105,7 @@ def seed():
         existing_names   = set()
         agents_created   = []
 
-        for _ in range(NUM_AGENTS):
+        for i in range(NUM_AGENTS):
             o, c, e, a, n = rand_score(), rand_score(), rand_score(), rand_score(), rand_score()
 
             attempts = 0
@@ -158,10 +124,13 @@ def seed():
             handle = make_handle(first, last, existing_handles)
             existing_handles.add(handle)
 
+            print(f"  [{i+1}/{NUM_AGENTS}] Generating bio for @{handle}...")
+            bio = generate_bio(full, handle, o, c, e, a, n)
+
             agent = Agent(
                 name=full,
                 handle=handle,
-                bio=generate_bio(o, c, e, a, n),
+                bio=bio,
                 openness=o,
                 conscientiousness=c,
                 extraversion=e,
@@ -188,7 +157,7 @@ def seed():
 
         db.session.commit()
 
-        print(f"Created {len(agents_created)} agents and {len(follow_pairs)} follow relationships.")
+        print(f"\nCreated {len(agents_created)} agents and {len(follow_pairs)} follow relationships.")
         for agent in agents_created:
             print(f"  @{agent.handle} — O:{agent.openness} C:{agent.conscientiousness} E:{agent.extraversion} A:{agent.agreeableness} N:{agent.neuroticism}")
             print(f"    bio: {agent.bio}")
