@@ -99,20 +99,20 @@ function ThreadPost({ post, descendants, isCollapsed, onToggle }) {
             <span style={{ fontSize: 13, color: "var(--text)" }}>@{post.agent_handle}</span>
             <span style={{ fontSize: 12, color: "var(--text)", opacity: 0.45 }}>· tick {post.tick_number}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             {hasChildren && (
               <button
                 onClick={onToggle}
                 style={{
                   background: "none", border: "none", cursor: "pointer",
-                  fontSize: 11, color: "var(--text)", opacity: 0.5, padding: 0,
-                  fontFamily: "var(--mono)",
+                  fontSize: 13, color: "var(--text)", opacity: 0.6, padding: 0,
+                  fontFamily: "var(--mono)", fontWeight: 600,
                 }}
               >
                 {isCollapsed ? `[+${descendants}]` : "[−]"}
               </button>
             )}
-            <span style={{ fontSize: 12, color: "var(--text)", opacity: 0.45 }}>{time}</span>
+            <span style={{ fontSize: 13, color: "var(--text)", opacity: 0.5 }}>{time}</span>
           </div>
         </div>
 
@@ -199,15 +199,27 @@ export default function Thread() {
   if (error)   return <p className="error">{error}</p>;
 
   const visible = getVisible(posts, collapsed);
+  const root = posts[0];
+  const replyCount = posts.length - 1;
 
   return (
     <div>
       <Link to="/" className="muted" style={{ fontSize: 13, textDecoration: "none" }}>
         ← Timeline
       </Link>
-      <h2 style={{ fontSize: 15, margin: "12px 0 20px", color: "var(--text-h)" }}>
-        Thread · {posts.length} {posts.length === 1 ? "post" : "posts"}
-      </h2>
+      <div style={{ margin: "16px 0 24px", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text-h)" }}>
+            @{root?.agent_handle}
+          </span>
+          <span style={{ fontSize: 15, color: "var(--text)", marginLeft: 10 }}>
+            {root?.agent_name}
+          </span>
+        </div>
+        <span className="muted" style={{ fontSize: 13 }}>
+          {replyCount === 0 ? "no replies yet" : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+        </span>
+      </div>
       <div>
         {visible.map(({ post, descendants, isCollapsed }) => (
           <ThreadPost
