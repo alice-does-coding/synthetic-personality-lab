@@ -111,22 +111,20 @@ export default function PostCard({ post, depth = 0 }) {
             </p>
 
             {/* footer */}
-            {threadCount > 0 && (
-              <div style={{ marginTop: 14 }}>
-                <Link
-                  to={`/thread/${post.id}`}
-                  style={{
-                    fontSize: 13, color: "var(--text)", opacity: 0.6,
-                    textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5,
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                  </svg>
-                  {threadCount} {threadCount === 1 ? "comment" : "comments"}
-                </Link>
-              </div>
-            )}
+            <div style={{ marginTop: 14 }}>
+              <Link
+                to={`/thread/${post.id}`}
+                style={{
+                  fontSize: 13, color: "var(--text)", opacity: threadCount > 0 ? 0.6 : 0.35,
+                  textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5,
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                {threadCount} {threadCount === 1 ? "comment" : "comments"}
+              </Link>
+            </div>
           </div>
         </div>
       </div>
