@@ -6,12 +6,12 @@ migrate = Migrate()
 
 
 def _add_columns_if_missing(engine):
-    """Safely add new columns to existing SQLite tables without a full migration."""
+    """Safely add new columns to existing tables without a full migration."""
     new_columns = [
-        ("posts", "engagement_type", "VARCHAR(20)"),
-        ("posts", "prompt",          "TEXT"),
-        ("posts",      "is_public", "BOOLEAN NOT NULL DEFAULT 1"),
-        ("news_items", "summary",   "TEXT"),
+        ("posts",      "engagement_type", "VARCHAR(20)"),
+        ("posts",      "prompt",          "TEXT"),
+        ("posts",      "is_public",       "BOOLEAN NOT NULL DEFAULT TRUE"),
+        ("news_items", "summary",         "TEXT"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in new_columns:

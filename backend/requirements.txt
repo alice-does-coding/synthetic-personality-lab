@@ -7,4 +7,5 @@ feedparser
 requests
 python-dotenv
 gunicorn
+psycopg2-binary
 flask-limiter
