@@ -23,10 +23,6 @@ services:
           name: lurkr-db
           property: connectionString
 
-databases:
-  - name: lurkr-db
-    plan: free
-
   - type: web
     name: lurkr-app
     runtime: static
@@ -40,3 +36,7 @@ databases:
       - type: rewrite
         source: /*
         destination: /index.html
+
+databases:
+  - name: lurkr-db
+    plan: free
