@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import ForceGraph2D from "react-force-graph-2d";
 import { api } from "../api";
 
 const TRAITS = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"];
+const SHORT  = { openness: "OPE", conscientiousness: "CON", extraversion: "EXT", agreeableness: "AGR", neuroticism: "NEU" };
 const TRAIT_COLORS = {
   openness:          "#8b5cf6",
   conscientiousness: "#3b82f6",
@@ -16,36 +17,38 @@ function lerpColor(a, b, t) {
   const hex = (s) => parseInt(s, 16);
   const ar = hex(a.slice(1, 3)), ag = hex(a.slice(3, 5)), ab = hex(a.slice(5, 7));
   const br = hex(b.slice(1, 3)), bg = hex(b.slice(3, 5)), bb = hex(b.slice(5, 7));
-  const r  = Math.round(ar + (br - ar) * t);
-  const g  = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return `rgb(${r},${g},${bl})`;
+  return `rgb(${Math.round(ar+(br-ar)*t)},${Math.round(ag+(bg-ag)*t)},${Math.round(ab+(bb-ab)*t)})`;
 }
 
-function nodeColor(node, trait) {
+// Normalize score to [0,1] within the actual data range of nodes
+function normalizedScore(score, min, max) {
+  if (score == null) return 0.5;
+  if (max === min) return 0.5;
+  return Math.max(0, Math.min(1, (score - min) / (max - min)));
+}
+
+function nodeColor(node, trait, traitRange) {
   const score = node[trait];
-  if (score == null) return "#444";
-  return lerpColor("#2a2a3a", TRAIT_COLORS[trait], score / 100);
+  if (score == null) return "#555";
+  const t = normalizedScore(score, traitRange.min, traitRange.max);
+  // Low → muted gray, high → full trait color
+  return lerpColor("#888888", TRAIT_COLORS[trait], t);
 }
 
 const SIZE_MIN = 5;
 const SIZE_MAX = 18;
 
-function nodeRadius(node, max) {
+function nodeRadius(val, max) {
   if (max === 0) return SIZE_MIN;
-  return SIZE_MIN + ((node.follower_count / max) ** 0.5) * (SIZE_MAX - SIZE_MIN);
+  return SIZE_MIN + ((val / max) ** 0.5) * (SIZE_MAX - SIZE_MIN);
 }
-
-const SELECT_STYLE = {
-  background: "#1a1a1a", border: "1px solid #333", borderRadius: 4,
-  color: "#ccc", fontSize: 12, padding: "4px 8px", cursor: "pointer",
-};
 
 export default function Graph() {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [trait,     setTrait]     = useState("extraversion");
   const [sizeBy,    setSizeBy]    = useState("follower_count");
   const [hovered,   setHovered]   = useState(null);
+  const [selected,  setSelected]  = useState(null);
   const [mousePos,  setMousePos]  = useState({ x: 0, y: 0 });
   const [dims,      setDims]      = useState({ w: 800, h: 600 });
   const [error,     setError]     = useState(null);
@@ -53,7 +56,6 @@ export default function Graph() {
 
   const containerRef = useRef(null);
   const graphRef     = useRef(null);
-  const navigate     = useNavigate();
 
   useEffect(() => {
     api.graph()
@@ -68,7 +70,6 @@ export default function Graph() {
     graphRef.current.d3Force("link").distance(160);
   }, [graphData]);
 
-  // Resize observer — runs after loading resolves and container mounts
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -79,7 +80,6 @@ export default function Graph() {
     return () => obs.disconnect();
   }, [loading]);
 
-  // Mouse tracking — unconditional, looks up container rect dynamically
   useEffect(() => {
     const onMove = (e) => {
       const rect = containerRef.current?.getBoundingClientRect();
@@ -89,11 +89,26 @@ export default function Graph() {
     return () => window.removeEventListener("mousemove", onMove);
   }, []);
 
-  const maxFollowers = graphData.nodes.reduce((m, n) => Math.max(m, n.follower_count), 0);
-  const maxPosts     = graphData.nodes.reduce((m, n) => Math.max(m, n.post_count), 0);
+  // Compute per-trait min/max across all nodes for normalized coloring
+  const traitRanges = useMemo(() => {
+    const ranges = {};
+    for (const t of TRAITS) {
+      const vals = graphData.nodes.map(n => n[t]).filter(v => v != null);
+      ranges[t] = {
+        min: vals.length ? Math.min(...vals) : 0,
+        max: vals.length ? Math.max(...vals) : 100,
+      };
+    }
+    return ranges;
+  }, [graphData.nodes]);
 
-  // IDs of nodes directly connected to the hovered node
-  const connectedIds = useMemo(() => {
+  const maxVal = useMemo(() => ({
+    follower_count: graphData.nodes.reduce((m, n) => Math.max(m, n.follower_count), 0),
+    post_count:     graphData.nodes.reduce((m, n) => Math.max(m, n.post_count), 0),
+  }), [graphData.nodes]);
+
+  // Connections for hovered node
+  const hoveredConnections = useMemo(() => {
     if (!hovered) return null;
     const ids = new Set();
     graphData.links.forEach((link) => {
@@ -105,52 +120,67 @@ export default function Graph() {
     return ids;
   }, [hovered, graphData.links]);
 
+  // Connections for selected node (for panel)
+  const selectedConnections = useMemo(() => {
+    if (!selected) return { followers: [], following: [] };
+    const nodeMap = Object.fromEntries(graphData.nodes.map(n => [n.id, n]));
+    const followers = [], following = [];
+    graphData.links.forEach((link) => {
+      const src = typeof link.source === "object" ? link.source.id : link.source;
+      const tgt = typeof link.target === "object" ? link.target.id : link.target;
+      if (tgt === selected.id && nodeMap[src]) followers.push(nodeMap[src]);
+      if (src === selected.id && nodeMap[tgt]) following.push(nodeMap[tgt]);
+    });
+    return { followers, following };
+  }, [selected, graphData.links, graphData.nodes]);
+
   const getRadius = useCallback((node) => {
-    const max = sizeBy === "follower_count" ? maxFollowers : maxPosts;
-    return nodeRadius({ follower_count: node[sizeBy] }, max);
-  }, [sizeBy, maxFollowers, maxPosts]);
+    return nodeRadius(node[sizeBy] ?? 0, maxVal[sizeBy]);
+  }, [sizeBy, maxVal]);
 
   const paintNode = useCallback((node, ctx, globalScale) => {
     const r      = getRadius(node);
-    const color  = nodeColor(node, trait);
+    const color  = nodeColor(node, trait, traitRanges[trait]);
+    const isSel  = selected?.id === node.id;
     const isHov  = hovered?.id === node.id;
-    const inNet  = !connectedIds || isHov || connectedIds.has(node.id);
-    const alpha  = connectedIds && !inNet ? 0.1 : 1;
+    const inNet  = !hoveredConnections || isHov || hoveredConnections.has(node.id);
+    const alpha  = hoveredConnections && !inNet ? 0.08 : 1;
 
-    if (isHov) {
+    ctx.globalAlpha = alpha;
+
+    if (isSel) {
       ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 6, 0, 2 * Math.PI);
-      ctx.fillStyle = color.replace("rgb", "rgba").replace(")", ", 0.2)");
+      ctx.arc(node.x, node.y, r + 7, 0, 2 * Math.PI);
+      ctx.fillStyle = "#ff3ea533";
       ctx.fill();
     }
 
-    ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
     ctx.fillStyle = color;
     ctx.fill();
 
-    if (isHov) {
-      ctx.strokeStyle = "#fff";
+    if (isSel || isHov) {
+      ctx.strokeStyle = isSel ? "#ff3ea5" : "#fff";
       ctx.lineWidth = 1.5 / globalScale;
       ctx.stroke();
     }
 
-    if (globalScale >= 1.2 || isHov || inNet) {
+    if (isSel || isHov) {
       const fontSize = Math.max(10, 12 / globalScale);
-      ctx.font = `${isHov ? "600 " : ""}${fontSize}px sans-serif`;
+      ctx.font = `700 ${fontSize}px monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = isHov ? "#fff" : inNet ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.15)";
+      ctx.fillStyle = isSel ? "#ff3ea5" : "#fff";
       ctx.fillText(`@${node.handle}`, node.x, node.y + r + fontSize * 0.9);
     }
 
     ctx.globalAlpha = 1;
-  }, [trait, hovered, connectedIds, getRadius]);
+  }, [trait, traitRanges, hovered, selected, hoveredConnections, getRadius]);
 
   const handleNodeClick = useCallback((node) => {
-    navigate(`/social/agents/${node.id}`);
-  }, [navigate]);
+    setSelected(prev => prev?.id === node.id ? null : node);
+  }, []);
 
   const handleNodeHover = useCallback((node) => {
     setHovered(node || null);
@@ -161,151 +191,269 @@ export default function Graph() {
   if (loading) return <p className="muted" style={{ padding: 24 }}>Loading…</p>;
   if (error)   return <p className="error"  style={{ padding: 24 }}>{error}</p>;
 
-  const traitColor = TRAIT_COLORS[trait];
-
-  // Keep hover card inside the viewport
-  const cardW = 190;
-  const cardH = 200;
+  const traitColor  = TRAIT_COLORS[trait];
+  const traitRange  = traitRanges[trait];
+  const cardW = 180;
+  const cardH = 160;
   const cardX = mousePos.x + 16 + cardW > dims.w ? mousePos.x - cardW - 8 : mousePos.x + 16;
   const cardY = mousePos.y + 16 + cardH > dims.h ? mousePos.y - cardH - 8 : mousePos.y + 16;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)" }}>
+    <div style={{ display: "flex", flexDirection: "column", margin: -20, height: "calc(100vh - 44px)" }}>
 
       {/* Controls */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 16,
-        padding: "10px 20px", flexShrink: 0,
-        borderBottom: "1px solid var(--border, #222)",
-        background: "var(--bg, #0f0f0f)",
+        display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+        padding: "8px 20px", flexShrink: 0,
+        borderBottom: "1px solid var(--border)",
+        background: "var(--bg)",
       }}>
-        <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text-h)" }}>Social graph</span>
+        <span className="page-title" style={{ margin: 0, flexShrink: 0 }}>Social graph</span>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <label className="muted" style={{ fontSize: 12 }}>color</label>
-          <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", border: "1px solid #333" }}>
+          <span className="muted">color</span>
+          <div style={{ display: "flex", border: "1px solid var(--border)" }}>
             {TRAITS.map((t, i) => (
               <button key={t} onClick={() => setTrait(t)} style={{
-                background: trait === t ? TRAIT_COLORS[t] + "33" : "transparent",
+                background: trait === t ? TRAIT_COLORS[t] + "22" : "var(--bg)",
                 border: "none",
-                borderRight: i < TRAITS.length - 1 ? "1px solid #333" : "none",
-                color: trait === t ? TRAIT_COLORS[t] : "#666",
-                fontSize: 11, padding: "4px 10px", cursor: "pointer",
-                fontWeight: trait === t ? 700 : 400,
-                transition: "all 0.15s",
-              }}>{t.slice(0, 3).toUpperCase()}</button>
+                borderRight: i < TRAITS.length - 1 ? "1px solid var(--border)" : "none",
+                color: trait === t ? TRAIT_COLORS[t] : "var(--text)",
+                fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700,
+                letterSpacing: "0.06em",
+                padding: "4px 10px", cursor: "pointer",
+              }}>{SHORT[t]}</button>
             ))}
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <label className="muted" style={{ fontSize: 12 }}>size</label>
-          <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", border: "1px solid #333" }}>
-            {[["follower_count", "followers"], ["post_count", "posts"]].map(([val, label]) => (
+          <span className="muted">size</span>
+          <div style={{ display: "flex", border: "1px solid var(--border)" }}>
+            {[["follower_count", "followers"], ["post_count", "posts"]].map(([val, label], i) => (
               <button key={val} onClick={() => setSizeBy(val)} style={{
-                background: sizeBy === val ? "#333" : "transparent",
-                border: "none", borderRight: val === "follower_count" ? "1px solid #333" : "none",
-                color: sizeBy === val ? "#fff" : "#888",
-                fontSize: 12, padding: "4px 10px", cursor: "pointer",
+                background: sizeBy === val ? "var(--pink)" : "var(--bg)",
+                border: "none",
+                borderRight: i === 0 ? "1px solid var(--border)" : "none",
+                color: sizeBy === val ? "#fff" : "var(--text)",
+                fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700,
+                letterSpacing: "0.06em",
+                padding: "4px 10px", cursor: "pointer",
               }}>{label}</button>
             ))}
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
-          <span className="muted" style={{ fontSize: 11 }}>0</span>
+          <span className="muted" style={{ fontSize: 10 }}>{Math.round(traitRange.min)}</span>
           <div style={{
-            width: 100, height: 10, borderRadius: 5,
-            background: `linear-gradient(to right, #2a2a3a, ${traitColor})`,
-            border: "1px solid #333",
+            width: 80, height: 8,
+            background: `linear-gradient(to right, #888, ${traitColor})`,
+            border: "1px solid var(--border)",
           }} />
-          <span className="muted" style={{ fontSize: 11 }}>100</span>
-          <span style={{ fontSize: 11, color: traitColor, marginLeft: 4, fontWeight: 600 }}>{trait}</span>
+          <span className="muted" style={{ fontSize: 10 }}>{Math.round(traitRange.max)}</span>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700, color: traitColor, marginLeft: 4 }}>
+            {SHORT[trait]}
+          </span>
         </div>
 
-        <button onClick={() => graphRef.current?.zoomToFit(400)} style={{ ...SELECT_STYLE, marginLeft: 8 }}>
-          fit view
-        </button>
+        <button className="btn" onClick={() => graphRef.current?.zoomToFit(400)}>fit view</button>
       </div>
 
-      {/* Canvas + hover card */}
-      <div ref={containerRef} style={{ flex: 1, background: "#0a0a0f", position: "relative" }}>
-        <ForceGraph2D
-          ref={graphRef}
-          graphData={graphData}
-          width={dims.w}
-          height={dims.h}
-          backgroundColor="#0a0a0f"
-          warmupTicks={80}
-          cooldownTicks={200}
-          d3AlphaDecay={0.015}
-          d3VelocityDecay={0.25}
-          onEngineStop={() => graphRef.current?.zoomToFit(400, 60)}
-          nodeCanvasObject={paintNode}
-          nodePointerAreaPaint={(node, color, ctx) => {
-            const r = getRadius(node);
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
-          }}
-          onNodeClick={handleNodeClick}
-          onNodeHover={handleNodeHover}
-          linkColor={(link) => {
-            const src    = typeof link.source === "object" ? link.source : graphData.nodes.find(n => n.id === link.source);
-            const tgt    = typeof link.target === "object" ? link.target : graphData.nodes.find(n => n.id === link.target);
-            const srcId  = src?.id;
-            const tgtId  = tgt?.id;
-            const active = !connectedIds || srcId === hovered?.id || tgtId === hovered?.id;
-            const opacity = active ? 0.7 : 0.05;
-            return src ? nodeColor(src, trait).replace("rgb", "rgba").replace(")", `, ${opacity})`) : `rgba(255,255,255,${opacity})`;
-          }}
-          linkWidth={(link) => {
-            const srcId = typeof link.source === "object" ? link.source.id : link.source;
-            const tgtId = typeof link.target === "object" ? link.target.id : link.target;
-            return connectedIds && (srcId === hovered?.id || tgtId === hovered?.id) ? 2.5 : 1.2;
-          }}
-          linkCurvature={0.2}
-          linkDirectionalArrowLength={5}
-          linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={(link) => {
-            const src    = typeof link.source === "object" ? link.source : graphData.nodes.find(n => n.id === link.source);
-            const srcId  = src?.id;
-            const tgtId  = typeof link.target === "object" ? link.target.id : link.target;
-            const active = !connectedIds || srcId === hovered?.id || tgtId === hovered?.id;
-            return src ? nodeColor(src, trait).replace("rgb", "rgba").replace(")", `, ${active ? 0.9 : 0.05})`) : "rgba(255,255,255,0.1)";
-          }}
-        />
+      {/* Canvas + panel */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <div ref={containerRef} style={{ flex: 1, background: "#0a0a0f", position: "relative", overflow: "hidden" }}>
+          <ForceGraph2D
+            ref={graphRef}
+            graphData={graphData}
+            width={dims.w}
+            height={dims.h}
+            backgroundColor="#0a0a0f"
+            warmupTicks={80}
+            cooldownTicks={200}
+            d3AlphaDecay={0.015}
+            d3VelocityDecay={0.25}
+            onEngineStop={() => graphRef.current?.zoomToFit(400, 60)}
+            nodeCanvasObject={paintNode}
+            nodePointerAreaPaint={(node, color, ctx) => {
+              const r = getRadius(node);
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
+              ctx.fillStyle = color;
+              ctx.fill();
+            }}
+            onNodeClick={handleNodeClick}
+            onNodeHover={handleNodeHover}
+            linkColor={(link) => {
+              const src   = typeof link.source === "object" ? link.source : graphData.nodes.find(n => n.id === link.source);
+              const srcId = src?.id;
+              const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+              const active = !hoveredConnections || srcId === hovered?.id || tgtId === hovered?.id;
+              return src
+                ? nodeColor(src, trait, traitRanges[trait]).replace("rgb", "rgba").replace(")", `, ${active ? 0.7 : 0.04})`)
+                : `rgba(255,255,255,${active ? 0.3 : 0.04})`;
+            }}
+            linkWidth={(link) => {
+              const srcId = typeof link.source === "object" ? link.source.id : link.source;
+              const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+              return hoveredConnections && (srcId === hovered?.id || tgtId === hovered?.id) ? 2.5 : 1;
+            }}
+            linkCurvature={0.2}
+            linkDirectionalArrowLength={5}
+            linkDirectionalArrowRelPos={1}
+            linkDirectionalArrowColor={(link) => {
+              const src   = typeof link.source === "object" ? link.source : graphData.nodes.find(n => n.id === link.source);
+              const srcId = src?.id;
+              const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+              const active = !hoveredConnections || srcId === hovered?.id || tgtId === hovered?.id;
+              return src
+                ? nodeColor(src, trait, traitRanges[trait]).replace("rgb", "rgba").replace(")", `, ${active ? 0.9 : 0.04})`)
+                : "rgba(255,255,255,0.1)";
+            }}
+          />
 
-        {/* Hover card — follows cursor, stays inside canvas */}
-        {hovered && (
-          <div style={{
-            position: "absolute", left: cardX, top: cardY,
-            zIndex: 10, pointerEvents: "none",
-            background: "rgba(14,14,18,0.95)",
-            border: "1px solid #2a2a2a",
-            borderRadius: 8, padding: "12px 14px",
-            width: cardW,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-            backdropFilter: "blur(8px)",
-          }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#fff", marginBottom: 2 }}>
-              {hovered.name}
-            </div>
-            <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>@{hovered.handle}</div>
-            {TRAITS.map(t => (
-              <div key={t} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
-                <span style={{ color: TRAIT_COLORS[t], fontWeight: 600 }}>{t.slice(0, 3).toUpperCase()}</span>
-                <span style={{ color: "#bbb" }}>{hovered[t] != null ? hovered[t].toFixed(1) : "—"}</span>
+          {/* Hover tooltip — only when nothing selected */}
+          {hovered && !selected && (
+            <div style={{
+              position: "absolute", left: cardX, top: cardY,
+              zIndex: 10, pointerEvents: "none",
+              background: "var(--bg)", border: "1px solid var(--border)",
+              padding: "10px 14px", width: cardW,
+            }}>
+              <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 12, color: "var(--text-h)", marginBottom: 2 }}>
+                {hovered.name}
               </div>
-            ))}
-            <div style={{ borderTop: "1px solid #222", marginTop: 8, paddingTop: 8, display: "flex", gap: 10 }}>
-              <span className="muted" style={{ fontSize: 10 }}>{hovered.follower_count} followers</span>
-              <span className="muted" style={{ fontSize: 10 }}>{hovered.post_count} posts</span>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>@{hovered.handle}</div>
+              {TRAITS.map(t => (
+                <div key={t} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                  <span style={{ fontFamily: "var(--mono)", color: TRAIT_COLORS[t], fontWeight: 700 }}>{SHORT[t]}</span>
+                  <span style={{ color: "var(--text-h)" }}>{hovered[t] != null ? Math.round(hovered[t]) : "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Selected node panel */}
+        {selected && (
+          <div style={{
+            width: 260, flexShrink: 0,
+            borderLeft: "1px solid var(--border)",
+            background: "var(--bg)",
+            display: "flex", flexDirection: "column",
+            overflowY: "auto",
+          }}>
+            {/* Header */}
+            <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 13, color: "var(--text-h)" }}>
+                    {selected.name}
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>@{selected.handle}</div>
+                </div>
+                <button onClick={() => setSelected(null)} style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "var(--text)", fontFamily: "var(--mono)", fontSize: 14, padding: 0,
+                }}>✕</button>
+              </div>
+
+              <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+                <div>
+                  <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 16, color: "var(--text-h)" }}>
+                    {selected.follower_count}
+                  </div>
+                  <div className="muted" style={{ fontSize: 10 }}>followers</div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 16, color: "var(--text-h)" }}>
+                    {selected.post_count}
+                  </div>
+                  <div className="muted" style={{ fontSize: 10 }}>posts</div>
+                </div>
+              </div>
+
+              {/* OCEAN bars */}
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 5 }}>
+                {TRAITS.map(t => {
+                  const val = selected[t] != null ? Math.round(selected[t]) : null;
+                  return (
+                    <div key={t} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, color: TRAIT_COLORS[t], width: 28 }}>
+                        {SHORT[t]}
+                      </span>
+                      <div style={{ flex: 1, height: 3, background: "var(--border)" }}>
+                        {val != null && <div style={{ width: `${val}%`, height: "100%", background: TRAIT_COLORS[t] }} />}
+                      </div>
+                      <span className="muted" style={{ fontSize: 10, width: 20, textAlign: "right" }}>{val ?? "—"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <Link
+                to={`/social/agents/${selected.id}`}
+                style={{ display: "block", marginTop: 12, fontSize: 11, fontFamily: "var(--mono)", color: "var(--pink)", textDecoration: "none" }}
+              >
+                view profile →
+              </Link>
+            </div>
+
+            {/* Followers */}
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
+              <div className="page-title" style={{ margin: "0 0 8px" }}>
+                followers ({selectedConnections.followers.length})
+              </div>
+              {selectedConnections.followers.length === 0
+                ? <p className="muted" style={{ fontSize: 11 }}>none</p>
+                : selectedConnections.followers.map(n => (
+                  <NodeRow key={n.id} node={n} trait={trait} traitRange={traitRanges[trait]} onSelect={setSelected} />
+                ))
+              }
+            </div>
+
+            {/* Following */}
+            <div style={{ padding: "10px 16px" }}>
+              <div className="page-title" style={{ margin: "0 0 8px" }}>
+                following ({selectedConnections.following.length})
+              </div>
+              {selectedConnections.following.length === 0
+                ? <p className="muted" style={{ fontSize: 11 }}>none</p>
+                : selectedConnections.following.map(n => (
+                  <NodeRow key={n.id} node={n} trait={trait} traitRange={traitRanges[trait]} onSelect={setSelected} />
+                ))
+              }
             </div>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function NodeRow({ node, trait, traitRange, onSelect }) {
+  const color = nodeColor(node, trait, traitRange);
+  const score = node[trait] != null ? Math.round(node[trait]) : null;
+  return (
+    <div
+      onClick={() => onSelect(node)}
+      style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "5px 0", cursor: "pointer",
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <div style={{ width: 8, height: 8, background: color, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700, color: "var(--text-h)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          @{node.handle}
+        </div>
+      </div>
+      {score != null && (
+        <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: TRAIT_COLORS[trait], fontWeight: 700 }}>
+          {score}
+        </span>
+      )}
     </div>
   );
 }
