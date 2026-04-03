@@ -39,7 +39,8 @@ export const api = {
   newsPersonalityCorrelation: ()    => req("/news/personality-correlation"),
 
   // posts
-  listPosts: (limit = 50, agentId) => req(`/posts/?limit=${limit}${agentId ? `&agent_id=${agentId}` : ""}`),
+  listPosts:  (limit = 50, agentId) => req(`/posts/?limit=${limit}${agentId ? `&agent_id=${agentId}` : ""}`),
+  monologue:  (agentId, limit = 100) => req(`/posts/monologue/${agentId}?limit=${limit}`),
   feed:      (agentId, limit = 20) => req(`/posts/feed/${agentId}?limit=${limit}`),
   replies:   (postId)              => req(`/posts/${postId}/replies`),
   thread:    (postId)              => req(`/posts/${postId}/thread`),

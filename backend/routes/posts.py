@@ -9,7 +9,7 @@ posts_bp = Blueprint("posts", __name__)
 def list_posts():
     limit    = request.args.get("limit", 50, type=int)
     agent_id = request.args.get("agent_id", type=int)
-    query = Post.query.order_by(Post.created_at.desc())
+    query = Post.query.filter_by(is_public=True).order_by(Post.created_at.desc())
     if agent_id:
         query = query.filter_by(agent_id=agent_id)
     return jsonify([p.to_dict() for p in query.limit(limit).all()])
@@ -60,7 +60,22 @@ def get_feed(agent_id):
         return jsonify([])
     posts = (
         Post.query
-        .filter(Post.agent_id.in_(followee_ids))
+        .filter(Post.agent_id.in_(followee_ids), Post.is_public == True)
+        .order_by(Post.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify([p.to_dict() for p in posts])
+
+
+@posts_bp.route("/monologue/<int:agent_id>", methods=["GET"])
+def get_monologue(agent_id):
+    """Inner monologue — thoughts the agent chose not to publish."""
+    Agent.query.get_or_404(agent_id)
+    limit = request.args.get("limit", 50, type=int)
+    posts = (
+        Post.query
+        .filter_by(agent_id=agent_id, is_public=False)
         .order_by(Post.created_at.desc())
         .limit(limit)
         .all()

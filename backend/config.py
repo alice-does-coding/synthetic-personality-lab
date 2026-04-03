@@ -25,6 +25,8 @@ class Config:
     NLP_SERVICE_URL = os.getenv("NLP_SERVICE_URL", "http://localhost:5001")
     # Hugging Face Inference API key — enables news sentiment/emotion analysis
     HF_API_KEY = os.getenv("HF_API_KEY")
+    # Thoughts generated per top-level post tick — 1 published, rest become inner monologue
+    N_THOUGHTS = int(os.getenv("N_THOUGHTS", 3))
     # Admin key — required to call sim control and agent write endpoints
     ADMIN_KEY = os.getenv("ADMIN_KEY")
     # Restrict CORS in production — set to https://lurkr.net via env var

@@ -10,6 +10,8 @@ def _add_columns_if_missing(engine):
     new_columns = [
         ("posts", "engagement_type", "VARCHAR(20)"),
         ("posts", "prompt",          "TEXT"),
+        ("posts",      "is_public", "BOOLEAN NOT NULL DEFAULT 1"),
+        ("news_items", "summary",   "TEXT"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in new_columns:

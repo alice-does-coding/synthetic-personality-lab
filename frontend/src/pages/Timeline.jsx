@@ -31,11 +31,7 @@ export default function Timeline() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
 
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 8000);
-    return () => clearInterval(id);
-  }, []);
+  useEffect(() => { load(); }, []);
 
   if (loading) return <p className="muted">Loading…</p>;
   if (error)   return <p className="error">{error}</p>;
@@ -73,7 +69,7 @@ export default function Timeline() {
         </div>
       </div>
 
-      {sorted.length === 0 && <p className="muted">No posts yet — fire a tick to get started.</p>}
+      {sorted.length === 0 && <p className="muted">No posts yet.</p>}
       {sorted.map((p) => <PostCard key={p.id} post={p} />)}
     </div>
   );

@@ -122,9 +122,10 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                     except Exception:
                         logger.exception("post generation failed for agent %d", agent_id)
 
-            for agent_id, result in post_results.items():
-                if result:
-                    content, parent_id, news_context, engagement_type, prompt = result
+            for agent_id, results in post_results.items():
+                if not results:
+                    continue
+                for content, parent_id, news_context, engagement_type, prompt, is_public in results:
                     db.session.add(Post(
                         agent_id=agent_id,
                         content=content,
@@ -133,6 +134,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                         news_context=news_context,
                         engagement_type=engagement_type,
                         prompt=prompt,
+                        is_public=is_public,
                     ))
                     # Register any new headlines for semantic analysis
                     if news_context:
@@ -140,6 +142,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                             if h.get("url") and not NewsItem.query.filter_by(url=h["url"]).first():
                                 db.session.add(NewsItem(
                                     url=h["url"], title=h["title"],
+                                    summary=h.get("summary"),
                                     source=h.get("source"), category=h.get("category"),
                                 ))
 
@@ -192,7 +195,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
 # ── Agent snapshots ───────────────────────────────────────────────────────────
 
 def _ipip_snapshot(agent):
-    """Lightweight snapshot for IPIP — includes recent posts for self-assessment grounding."""
+    """Lightweight snapshot for IPIP — includes all recent thoughts (public + private) for grounding."""
     recent = (
         Post.query
         .filter_by(agent_id=agent.id)
@@ -210,7 +213,7 @@ def _ipip_snapshot(agent):
         "extraversion":      agent.extraversion,
         "agreeableness":     agent.agreeableness,
         "neuroticism":       agent.neuroticism,
-        "recent_posts":      [p.content for p in recent],
+        "recent_posts":      [{"content": p.content, "is_public": p.is_public} for p in recent],
     }
 
 
@@ -219,13 +222,13 @@ def _agent_snapshot(agent):
     followee_ids = [f.followee_id for f in agent.following]
     feed = (
         Post.query
-        .filter(Post.agent_id.in_(followee_ids))
+        .filter(Post.agent_id.in_(followee_ids), Post.is_public == True)
         .order_by(Post.created_at.desc())
         .limit(Config.FEED_SAMPLE_SIZE)
         .all()
     ) if followee_ids else (
         Post.query
-        .filter(Post.agent_id != agent.id)
+        .filter(Post.agent_id != agent.id, Post.is_public == True)
         .order_by(Post.created_at.desc())
         .limit(Config.FEED_SAMPLE_SIZE)
         .all()
@@ -287,6 +290,7 @@ def _build_system_prompt(snap):
     )
 
 
+
 def _build_ipip_system_prompt(snap):
     """System prompt for IPIP assessment — identity only, no scores or cues.
     The agent reflects on its posts, not on an explicit description of itself."""
@@ -304,7 +308,8 @@ def _regenerate_bio(snap, client, big_five):
         f"Openness: {big_five['O']:.0f}, Conscientiousness: {big_five['C']:.0f}, "
         f"Extraversion: {big_five['E']:.0f}, Agreeableness: {big_five['A']:.0f}, "
         f"Neuroticism: {big_five['N']:.0f}\n\n"
-        "Rewrite your bio in 1–2 sentences. First person. No Big Five language. No personality labels."
+        "Rewrite your bio in 1–2 sentences. First person. No Big Five language. No personality labels. "
+        "Let it naturally reflect how much of yourself you share publicly versus keep to yourself."
     )
     resp = _mistral_chat(
         client,
@@ -315,53 +320,107 @@ def _regenerate_bio(snap, client, big_five):
     return _extract_text(resp.choices[0].message.content).strip().strip('"')
 
 
+def _generate_thoughts(snap, client, user_prompt, n):
+    """Generate n distinct thoughts in one call, separated by ---."""
+    prompt = user_prompt + f"\n\nWrite {n} different thoughts, each 1–3 sentences. Separate them with ---"
+    resp = _mistral_chat(
+        client,
+        messages=[
+            {"role": "system", "content": _build_system_prompt(snap)},
+            {"role": "user",   "content": prompt},
+        ],
+        max_tokens=150 * n,
+        temperature=0.9,
+    )
+    raw = _extract_text(resp.choices[0].message.content).strip()
+    thoughts = [t.strip() for t in raw.split("---") if t.strip()]
+    return thoughts[:n] if thoughts else [raw]
+
+
+def _select_thought(snap, thoughts, client):
+    """Ask the agent which thought to post. Returns 0-based index of selected thought."""
+    numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(thoughts))
+    resp = _mistral_chat(
+        client,
+        messages=[
+            {"role": "system", "content": _build_system_prompt(snap)},
+            {"role": "user",   "content": (
+                f"You had these thoughts:\n\n{numbered}\n\n"
+                "Which do you post? Reply with only the number."
+            )},
+        ],
+        max_tokens=5,
+        temperature=0.3,
+    )
+    raw = _extract_text(resp.choices[0].message.content).strip()
+    digits = re.findall(r"\d", raw)
+    if digits:
+        idx = int(digits[0]) - 1
+        if 0 <= idx < len(thoughts):
+            return idx
+    return 0
+
+
 def _generate_post(snap):
     client = _mistral_client()
 
     headlines = snap.get("headlines", [])
 
     if snap["reply_to"]:
+        # Replies are direct social responses — single generation, always public
         r = snap["reply_to"]
         user_prompt = (
             f"You saw this post from @{r['handle']}:\n\n\"{r['content']}\"\n\n"
             "Write a short reply (1–3 sentences) in your own voice. "
             "Be direct — respond to what they actually said."
         )
-        parent_id = r["id"]
-        stored_headlines = None
-        engagement_type = "reply"
-    elif headlines:
+        resp = _mistral_chat(
+            client,
+            messages=[
+                {"role": "system", "content": _build_system_prompt(snap)},
+                {"role": "user",   "content": user_prompt},
+            ],
+            max_tokens=150,
+            temperature=0.9,
+        )
+        content = _extract_text(resp.choices[0].message.content).strip()
+        return [(content, r["id"], None, "reply", user_prompt, True)]
+
+    # Top-level posts: generate N thoughts, agent selects one to publish
+    if headlines:
         h = headlines[0]
-        user_prompt = f"Headline: [{h['source']} / {h['category']}] {h['title']}"
-        parent_id = None
+        user_prompt = f"[{h['source']} / {h['category']}] {h['title']}"
+        if h.get("summary"):
+            user_prompt += f"\n\n{h['summary']}"
         stored_headlines = headlines
         engagement_type = "news"
     elif snap["feed"]:
         feed_lines = "\n".join(f"@{p['handle']}: {p['content']}" for p in snap["feed"])
         user_prompt = (
             f"Recent posts you've seen:\n\n{feed_lines}\n\n"
-            "Write your next post. Riff on something someone said, or post whatever is on your mind."
+            "What's on your mind?"
         )
-        parent_id = None
         stored_headlines = None
         engagement_type = "organic"
     else:
-        user_prompt = "Write your next post. Say whatever is on your mind."
-        parent_id = None
+        user_prompt = "What's on your mind?"
         stored_headlines = None
         engagement_type = "organic"
 
-    resp = _mistral_chat(
-        client,
-        messages=[
-            {"role": "system", "content": _build_system_prompt(snap)},
-            {"role": "user",   "content": user_prompt},
-        ],
-        max_tokens=150,
-        temperature=0.9,
-    )
-    content = _extract_text(resp.choices[0].message.content).strip()
-    return content, parent_id, stored_headlines, engagement_type, user_prompt
+    thoughts = _generate_thoughts(snap, client, user_prompt, Config.N_THOUGHTS)
+    selected_idx = _select_thought(snap, thoughts, client) if len(thoughts) > 1 else 0
+
+    return [
+        (
+            thought,
+            None,
+            stored_headlines if i == selected_idx else None,
+            engagement_type,
+            user_prompt if i == selected_idx else None,
+            i == selected_idx,
+        )
+        for i, thought in enumerate(thoughts)
+    ]
 
 
 def _run_ipip_assessment(snap):
@@ -370,10 +429,16 @@ def _run_ipip_assessment(snap):
 
     recent_posts = snap.get("recent_posts", [])
     if recent_posts:
-        posts_block = "\n".join(f'- "{p}"' for p in recent_posts)
+        public   = [p for p in recent_posts if p["is_public"]]
+        private  = [p for p in recent_posts if not p["is_public"]]
+        block = ""
+        if public:
+            block += "Posts you made public:\n" + "\n".join(f'- "{p["content"]}"' for p in public) + "\n\n"
+        if private:
+            block += "Thoughts you kept to yourself:\n" + "\n".join(f'- "{p["content"]}"' for p in private) + "\n\n"
         context = (
-            f"Here are your recent posts on Lurkr:\n{posts_block}\n\n"
-            "Reflect on how you've actually been thinking, feeling, and behaving based on those posts. "
+            f"Here is your recent inner and outer life on Lurkr:\n{block}"
+            "Reflect on how you've actually been thinking, feeling, and behaving. "
             "Then rate how accurately each statement below describes you — let your recent behavior guide your answers, "
             "not just how you'd like to see yourself.\n\n"
         )
@@ -427,11 +492,17 @@ _HF_EMOTION_URL   = "https://router.huggingface.co/hf-inference/models/j-hartman
 
 def _hf_infer_batch(url, texts, headers, retries=3):
     """POST a batch of texts to a HF Inference API endpoint.
-    Retries on HTTP 503 and on 200+error-body (model still loading)."""
+    Retries on HTTP 503, read timeouts, and 200+error-body (model still loading)."""
+    from requests.exceptions import ReadTimeout
     for attempt in range(retries):
-        resp = requests.post(url, json={"inputs": texts}, headers=headers, timeout=30)
+        wait = 20 * (attempt + 1)
+        try:
+            resp = requests.post(url, json={"inputs": texts}, headers=headers, timeout=30)
+        except ReadTimeout:
+            logger.info("HF read timeout (attempt %d/%d) — retrying in %ds", attempt + 1, retries, wait)
+            time.sleep(wait)
+            continue
         if resp.status_code == 503:
-            wait = 20 * (attempt + 1)
             logger.info("HF model loading (503) — retrying in %ds", wait)
             time.sleep(wait)
             continue
@@ -439,7 +510,6 @@ def _hf_infer_batch(url, texts, headers, retries=3):
         result = resp.json()
         # HF sometimes returns 200 with {"error": "..."} while the model warms up
         if isinstance(result, dict) and "error" in result:
-            wait = 20 * (attempt + 1)
             logger.info("HF model loading (error body) — retrying in %ds", wait)
             time.sleep(wait)
             continue
@@ -448,17 +518,21 @@ def _hf_infer_batch(url, texts, headers, retries=3):
 
 
 def _analyze_news_batch(items, app):
-    """Analyze a batch of (item_id, title) pairs via HF Inference API and persist results.
+    """Analyze a batch of (item_id, title, summary) tuples via HF Inference API and persist results.
     Two API calls total (sentiment + emotion) regardless of batch size."""
     key = Config.HF_API_KEY
     headers = {"Content-Type": "application/json"}
     if key:
         headers["Authorization"] = f"Bearer {key}"
 
-    titles = [title for _, title in items]
+    # Use title + summary for richer signal; fall back to title alone if no summary
+    texts = [
+        f"{title}. {summary}".strip() if summary else title
+        for _, title, summary in items
+    ]
     try:
-        sent_results = _hf_infer_batch(_HF_SENTIMENT_URL, titles, headers)
-        emo_results  = _hf_infer_batch(_HF_EMOTION_URL,   titles, headers)
+        sent_results = _hf_infer_batch(_HF_SENTIMENT_URL, texts, headers)
+        emo_results  = _hf_infer_batch(_HF_EMOTION_URL,   texts, headers)
     except Exception:
         logger.exception("HF batch analysis failed")
         return
@@ -468,7 +542,7 @@ def _analyze_news_batch(items, app):
     _SENT_SCORE = {"positive": 1.0, "neutral": 0.0, "negative": -1.0}
 
     with app.app_context():
-        for i, (item_id, title) in enumerate(items):
+        for i, (item_id, title, _) in enumerate(items):
             sent = sent_results[0][i]
             emo  = emo_results[0][i]
             sentiment = round(_SENT_SCORE.get(sent["label"].lower(), 0.0), 4)
@@ -494,7 +568,7 @@ def start_news_analyzer(app):
             time.sleep(30)
             with app.app_context():
                 unanalyzed = NewsItem.query.filter_by(analyzed=False).limit(5).all()
-                items = [(i.id, i.title) for i in unanalyzed]
+                items = [(i.id, i.title, i.summary) for i in unanalyzed]
             if items:
                 _analyze_news_batch(items, app)
 

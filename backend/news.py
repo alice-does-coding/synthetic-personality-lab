@@ -59,8 +59,6 @@ def _fetch_all() -> list[dict]:
                 # feedparser sometimes puts HTML in summary — strip tags crudely
                 import re
                 summary = re.sub(r"<[^>]+>", "", summary).strip()
-                # trim to first sentence
-                summary = summary.split(".")[0] + "." if summary else ""
                 url = entry.get("link", "").strip()
                 if title:
                     headlines.append({

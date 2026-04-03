@@ -68,6 +68,7 @@ class Post(db.Model):
     embedding = db.Column(db.JSON, nullable=True)
     engagement_type = db.Column(db.String(20), nullable=True)  # 'news', 'organic', 'reply'
     prompt = db.Column(db.Text, nullable=True)  # full user prompt sent to the LLM
+    is_public = db.Column(db.Boolean, default=True, nullable=False)  # False = inner monologue
 
     replies = db.relationship(
         "Post",
@@ -98,6 +99,7 @@ class Post(db.Model):
             "news_context": self.news_context,
             "engagement_type": self.engagement_type,
             "prompt": self.prompt,
+            "is_public": self.is_public,
             "agent_openness": self.agent.openness if self.agent else None,
             "agent_conscientiousness": self.agent.conscientiousness if self.agent else None,
             "agent_extraversion": self.agent.extraversion if self.agent else None,
@@ -113,6 +115,7 @@ class NewsItem(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     url        = db.Column(db.String(500), unique=True, nullable=False)
     title      = db.Column(db.Text, nullable=False)
+    summary    = db.Column(db.Text, nullable=True)
     source     = db.Column(db.String(100))
     category   = db.Column(db.String(100))
     sentiment  = db.Column(db.Float,   nullable=True)   # -1.0 (negative) → 1.0 (positive)
@@ -125,6 +128,7 @@ class NewsItem(db.Model):
             "id":           self.id,
             "url":          self.url,
             "title":        self.title,
+            "summary":      self.summary,
             "source":       self.source,
             "category":     self.category,
             "sentiment":    self.sentiment,

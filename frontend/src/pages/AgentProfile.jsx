@@ -17,9 +17,10 @@ const TRAIT_COLORS = {
 
 export default function AgentProfile() {
   const { id } = useParams();
-  const [agent,    setAgent]    = useState(null);
-  const [posts,    setPosts]    = useState([]);
-  const [history,  setHistory]  = useState([]);
+  const [agent,      setAgent]     = useState(null);
+  const [posts,      setPosts]     = useState([]);
+  const [history,    setHistory]   = useState([]);
+  const [monologue,  setMonologue] = useState([]);
   const [tab,          setTab]         = useState("posts");
   const [selectedTick, setSelectedTick] = useState(null);
   const [error,        setError]        = useState(null);
@@ -30,8 +31,9 @@ export default function AgentProfile() {
       api.getAgent(id),
       api.listPosts(100, id),
       api.personalityHistory(id),
+      api.monologue(id),
     ])
-      .then(([a, p, h]) => { setAgent(a); setPosts(p); setHistory(h); })
+      .then(([a, p, h, m]) => { setAgent(a); setPosts(p); setHistory(h); setMonologue(m); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
@@ -86,6 +88,9 @@ export default function AgentProfile() {
         <button className={`btn${tab === "comments" ? " primary" : ""}`} onClick={() => setTab("comments")}>
           Comments ({comments.length})
         </button>
+        <button className={`btn${tab === "monologue" ? " primary" : ""}`} onClick={() => setTab("monologue")}>
+          Monologue ({monologue.length})
+        </button>
         <button className={`btn${tab === "personality" ? " primary" : ""}`} onClick={() => setTab("personality")}>
           Personality drift ({history.length})
         </button>
@@ -114,6 +119,22 @@ export default function AgentProfile() {
                 </div>
               )}
               <PostCard post={c} />
+            </div>
+          ))
+        )
+      )}
+
+      {/* Monologue tab — thoughts the agent kept private */}
+      {tab === "monologue" && (
+        monologue.length === 0 ? (
+          <p className="muted">No inner monologue yet.</p>
+        ) : (
+          monologue.map((t) => (
+            <div key={t.id} className="card" style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 13, lineHeight: 1.6 }}>{t.content}</div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                tick {t.tick_number} · {t.engagement_type ?? "organic"}
+              </div>
             </div>
           ))
         )
