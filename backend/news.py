@@ -98,47 +98,9 @@ def get_headlines(n: int = 5) -> list[dict]:
     return random.sample(_cache, min(n, len(_cache)))
 
 
-# ── Personality-weighted headline selection ───────────────────────────────────
-# Agents with high scores in certain traits are more likely to pick up
-# headlines from matching categories.
-
-_TRAIT_AFFINITY: dict[str, list[str]] = {
-    "openness":          ["Science", "Technology", "World"],
-    "conscientiousness": ["Business", "Politics"],
-    "extraversion":      ["World", "Politics"],
-    "agreeableness":     ["Health"],
-    "neuroticism":       ["Health", "Politics", "World"],
-}
-
-
 def get_headlines_for_agent(snap: dict, n: int = 3) -> list[dict]:
-    """
-    Return n headlines weighted toward categories that match the agent's
-    dominant personality traits.  Falls back to random if cache is empty.
-    """
+    """Return n headlines sampled uniformly from the cache."""
     _refresh_if_stale()
     if not _cache:
         return []
-
-    # Build a weighted pool: headlines in affinity categories get 3× weight
-    dominant = [
-        trait for trait, score in {
-            "openness":          snap.get("openness") or 50,
-            "conscientiousness": snap.get("conscientiousness") or 50,
-            "extraversion":      snap.get("extraversion") or 50,
-            "agreeableness":     snap.get("agreeableness") or 50,
-            "neuroticism":       snap.get("neuroticism") or 50,
-        }.items()
-        if score >= 65
-    ]
-
-    affinity_cats = set()
-    for trait in dominant:
-        affinity_cats.update(_TRAIT_AFFINITY.get(trait, []))
-
-    weighted = []
-    for h in _cache:
-        weight = 3 if h["category"] in affinity_cats else 1
-        weighted.extend([h] * weight)
-
-    return random.sample(weighted, min(n, len(weighted)))
+    return random.sample(_cache, min(n, len(_cache)))

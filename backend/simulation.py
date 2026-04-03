@@ -289,12 +289,9 @@ def _build_system_prompt(snap):
 
 
 def _build_ipip_system_prompt(snap):
-    """System prompt for IPIP assessment — identity only, no scores or cues.
-    The agent reflects on its posts, not on an explicit description of itself."""
-    return (
-        f"You are {snap['name']} (@{snap['handle']}), a user on a social media platform called Lurkr.\n\n"
-        f"Bio: {snap['bio'] or 'No bio provided.'}"
-    )
+    """System prompt for IPIP assessment — name only, no platform framing or bio.
+    The agent must derive its self-assessment purely from its posts and thoughts."""
+    return f"You are {snap['name']} (@{snap['handle']})."
 
 
 def _regenerate_bio(snap, client):

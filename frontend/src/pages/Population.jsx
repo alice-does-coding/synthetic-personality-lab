@@ -31,11 +31,11 @@ function BrushHandle({ x, y, width, height }) {
   const cx = x + width / 2;
   return (
     <g>
-      <rect x={x} y={y + 1} width={width} height={height - 2} rx={3}
-        fill="#2a2a2a" stroke="#555" strokeWidth={1} />
+      <rect x={x} y={y + 1} width={width} height={height - 2}
+        fill="var(--bg)" stroke="var(--border)" strokeWidth={1} />
       {[height * 0.35, height * 0.5, height * 0.65].map((dy, i) => (
         <line key={i} x1={cx - 2} y1={y + dy} x2={cx + 2} y2={y + dy}
-          stroke="#777" strokeWidth={1} strokeLinecap="round" />
+          stroke="var(--text)" strokeWidth={1} strokeLinecap="round" />
       ))}
     </g>
   );
@@ -44,8 +44,8 @@ function BrushHandle({ x, y, width, height }) {
 const BRUSH_PROPS = {
   dataKey: "tick_number",
   height: 22,
-  stroke: "#333",
-  fill: "#111",
+  stroke: "var(--border)",
+  fill: "var(--bg)",
   travellerWidth: 10,
   traveller: <BrushHandle />,
   tickFormatter: () => "",   // suppress tick labels on the brush itself
@@ -66,22 +66,21 @@ function Modal({ title, subtitle, onClose, children }) {
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: "var(--bg-card, #141414)",
-        border: "1px solid var(--border, #2a2a2a)",
-        borderRadius: 10, padding: "22px 26px",
+        background: "var(--bg)",
+        border: "1px solid var(--border)",
+        padding: "22px 26px",
         width: "94vw", maxHeight: "92vh",
         display: "flex", flexDirection: "column",
-        boxShadow: "0 32px 96px rgba(0,0,0,0.7)",
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-h)" }}>{title}</div>
-            {subtitle && <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{subtitle}</div>}
+            <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 11, color: "var(--text-h)", textTransform: "uppercase", letterSpacing: "0.12em" }}>{title}</div>
+            {subtitle && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{subtitle}</div>}
           </div>
           <button onClick={onClose} style={{
             background: "none", border: "none", cursor: "pointer",
-            color: "var(--text-muted, #666)", fontSize: 18, lineHeight: 1,
-            padding: "0 0 0 20px",
+            color: "var(--text)", fontSize: 16, lineHeight: 1,
+            padding: "0 0 0 20px", fontFamily: "var(--mono)",
           }}>✕</button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>{children}</div>
@@ -93,13 +92,15 @@ function Modal({ title, subtitle, onClose, children }) {
 // ── Expand button ─────────────────────────────────────────────────────────────
 const expandBtn = {
   background: "none",
-  border: "1px solid var(--border, #333)",
-  borderRadius: 4,
-  color: "var(--text-muted, #666)",
-  fontSize: 11,
+  border: "1px solid var(--border)",
+  color: "var(--text)",
+  fontFamily: "var(--mono)",
+  fontSize: 10,
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
   cursor: "pointer",
   padding: "2px 8px",
-  letterSpacing: "0.02em",
 };
 
 // ── Mean drift chart ──────────────────────────────────────────────────────────
@@ -155,7 +156,7 @@ function MeanDriftChart({ drift }) {
     <>
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-h)" }}>Mean OCEAN drift</div>
+          <div className="page-title" style={{ margin: 0 }}>Mean OCEAN drift</div>
           <button onClick={() => setExpanded(true)} style={expandBtn}>⤢ expand</button>
         </div>
         <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
@@ -217,7 +218,7 @@ function AgentKey({ trajectories, agentColors, focused, onFocus }) {
       {trajectories.map((agent) => (
         <span key={agent.id}
           onClick={(e) => {
-            if (e.metaKey || e.ctrlKey) navigate(`/agents/${agent.id}`);
+            if (e.metaKey || e.ctrlKey) navigate(`/social/agents/${agent.id}`);
             else onFocus(focused === agent.handle ? null : agent.handle);
           }}
           title="Click to isolate · ⌘-click to open agent"
@@ -248,7 +249,7 @@ function SpaghettiChart({ trait, trajectories, agentColors }) {
     <>
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, color }}>{title}</div>
+          <div className="page-title" style={{ margin: 0, color }}>{title}</div>
           <button onClick={() => setExpanded(true)} style={expandBtn}>⤢ expand</button>
         </div>
         <AgentKey trajectories={trajectories} agentColors={agentColors} focused={focused} onFocus={setFocused} />
@@ -278,9 +279,9 @@ function AgentRadar({ agent }) {
   }));
 
   return (
-    <Link to={`/agents/${agent.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+    <Link to={`/social/agents/${agent.id}`} style={{ textDecoration: "none", color: "inherit" }}>
       <div className="card" style={{ cursor: "pointer", textAlign: "center" }}>
-        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text-h)", marginBottom: 1 }}>{agent.name}</div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-h)", marginBottom: 1 }}>{agent.name}</div>
         <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>@{agent.handle}</div>
         {hasScores ? (
           <>
@@ -343,13 +344,13 @@ export default function Population() {
 
   return (
     <div>
-      <h1 className="page-title" style={{ marginBottom: 20 }}>Population</h1>
+      <h1 className="page-title" style={{ marginBottom: 20 }}>Drift</h1>
 
       {drift.length > 0 && <MeanDriftChart drift={drift} />}
 
       {hasTrajectories && (
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-h)", marginBottom: 4 }}>
+          <div className="page-title" style={{ marginBottom: 4 }}>
             Individual trajectories
           </div>
           <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
@@ -363,7 +364,7 @@ export default function Population() {
         </div>
       )}
 
-      <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-h)", marginBottom: 12 }}>
+      <div className="page-title" style={{ marginBottom: 12 }}>
         Agent profiles
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>

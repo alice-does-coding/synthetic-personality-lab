@@ -33,7 +33,7 @@ function AgentCard({ agent }) {
   , "openness");
 
   return (
-    <Link to={`/agents/${agent.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+    <Link to={`/social/agents/${agent.id}`} style={{ textDecoration: "none", color: "inherit" }}>
       <div className="card" style={{ cursor: "pointer", height: "100%", boxSizing: "border-box" }}>
         {/* Header */}
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>

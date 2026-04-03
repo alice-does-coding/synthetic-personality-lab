@@ -149,7 +149,7 @@ export default function Graph() {
   }, [trait, hovered, connectedIds, getRadius]);
 
   const handleNodeClick = useCallback((node) => {
-    navigate(`/agents/${node.id}`);
+    navigate(`/social/agents/${node.id}`);
   }, [navigate]);
 
   const handleNodeHover = useCallback((node) => {

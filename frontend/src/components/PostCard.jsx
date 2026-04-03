@@ -94,12 +94,12 @@ export default function PostCard({ post, depth = 0 }) {
 
         {/* header row */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <Link to={`/agents/${post.agent_id}`} style={{ textDecoration: "none", flexShrink: 0 }}>
+          <Link to={`/social/agents/${post.agent_id}`} style={{ textDecoration: "none", flexShrink: 0 }}>
             <Avatar handle={post.agent_handle} />
           </Link>
 
           <Link
-            to={`/agents/${post.agent_id}`}
+            to={`/social/agents/${post.agent_id}`}
             style={{ fontWeight: 700, fontSize: 13, color: "var(--text-h)", textDecoration: "none", flexShrink: 0 }}
           >
             {post.agent_name}
@@ -134,7 +134,7 @@ export default function PostCard({ post, depth = 0 }) {
         {/* footer */}
         <div style={{ marginTop: 10, paddingLeft: 36 }}>
           <Link
-            to={`/thread/${post.id}`}
+            to={`/social/thread/${post.id}`}
             style={{
               fontSize: 11,
               color: threadCount > 0 ? "var(--pink)" : "var(--text)",

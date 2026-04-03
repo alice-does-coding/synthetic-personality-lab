@@ -62,7 +62,7 @@ function ThreadPost({ post, descendants, isCollapsed, onToggle }) {
     <div style={{ display: "flex", marginLeft: depth * INDENT, marginBottom: 6 }}>
       {/* Thread line / collapse toggle */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginRight: 10, flexShrink: 0 }}>
-        <Link to={`/agents/${post.agent_id}`} style={{ textDecoration: "none" }}>
+        <Link to={`/social/agents/${post.agent_id}`} style={{ textDecoration: "none" }}>
           <Avatar name={post.agent_name} handle={post.agent_handle} size={depth === 0 ? 40 : 34} />
         </Link>
         {hasChildren && (
@@ -92,7 +92,7 @@ function ThreadPost({ post, descendants, isCollapsed, onToggle }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
             <Link
-              to={`/agents/${post.agent_id}`}
+              to={`/social/agents/${post.agent_id}`}
               style={{ fontWeight: 700, fontSize: depth === 0 ? 15 : 14, color: "var(--text-h)", textDecoration: "none" }}
             >
               {post.agent_name}

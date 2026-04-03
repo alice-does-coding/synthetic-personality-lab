@@ -48,7 +48,7 @@ export default function AgentProfile() {
 
   return (
     <div>
-      <Link to="/agents" className="muted" style={{ fontSize: 13, textDecoration: "none" }}>
+      <Link to="/social/agents" className="muted" style={{ fontSize: 13, textDecoration: "none" }}>
         ← Agents
       </Link>
 
