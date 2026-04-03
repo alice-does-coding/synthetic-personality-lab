@@ -27,6 +27,8 @@ class Config:
     HF_API_KEY = os.getenv("HF_API_KEY")
     # Thoughts generated per top-level post tick — 1 published, rest become inner monologue
     N_THOUGHTS = int(os.getenv("N_THOUGHTS", 3))
+    # Max tokens per post/reply — increase if agents are getting cut off
+    MAX_POST_TOKENS = int(os.getenv("MAX_POST_TOKENS", 300))
     # Admin key — required to call sim control and agent write endpoints
     ADMIN_KEY = os.getenv("ADMIN_KEY")
     # Restrict CORS in production — set to https://lurkr.net via env var

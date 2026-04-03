@@ -283,10 +283,7 @@ def _mistral_client():
 def _build_system_prompt(snap):
     return (
         f"You are {snap['name']} (@{snap['handle']}), a user on a social media platform called Lurkr.\n\n"
-        f"Bio: {snap['bio'] or 'No bio provided.'}\n\n"
-        "Write short posts (1–3 sentences). No hashtags. No @mentions. "
-        "No meta-commentary about being an AI. Write as yourself, in first person. "
-        "You can be funny, crude, anxious, blunt, warm, chaotic — whatever your voice calls for."
+        f"Bio: {snap['bio'] or 'No bio provided.'}"
     )
 
 
@@ -300,16 +297,18 @@ def _build_ipip_system_prompt(snap):
     )
 
 
-def _regenerate_bio(snap, client, big_five):
-    """Regenerate the agent's bio from updated OCEAN scores after an IPIP assessment."""
+def _regenerate_bio(snap, client):
+    """Regenerate the agent's bio from recent posts — no scores, purely behavioral."""
+    recent = snap.get("recent_posts", [])
+    if recent:
+        posts_block = "\n".join(f'- "{p["content"]}"' for p in recent)
+        context = f"Here are your recent posts and thoughts on Lurkr:\n{posts_block}\n\n"
+    else:
+        context = ""
     prompt = (
-        f"You are {snap['name']} (@{snap['handle']}) on Lurkr. "
-        f"Your personality scores have shifted (0–100 scale):\n"
-        f"Openness: {big_five['O']:.0f}, Conscientiousness: {big_five['C']:.0f}, "
-        f"Extraversion: {big_five['E']:.0f}, Agreeableness: {big_five['A']:.0f}, "
-        f"Neuroticism: {big_five['N']:.0f}\n\n"
-        "Rewrite your bio in 1–2 sentences. First person. No Big Five language. No personality labels. "
-        "Let it naturally reflect how much of yourself you share publicly versus keep to yourself."
+        f"You are {snap['name']} (@{snap['handle']}) on Lurkr.\n\n"
+        f"{context}"
+        "Rewrite your bio in 1–2 sentences."
     )
     resp = _mistral_chat(
         client,
@@ -329,11 +328,11 @@ def _generate_thoughts(snap, client, user_prompt, n):
             {"role": "system", "content": _build_system_prompt(snap)},
             {"role": "user",   "content": prompt},
         ],
-        max_tokens=150 * n,
+        max_tokens=Config.MAX_POST_TOKENS * n,
         temperature=0.9,
     )
     raw = _extract_text(resp.choices[0].message.content).strip()
-    thoughts = [t.strip() for t in raw.split("---") if t.strip()]
+    thoughts = [re.sub(r'^\d+[\.\)]\s*', '', t.strip()) for t in raw.split("---") if t.strip()]
     return thoughts[:n] if thoughts else [raw]
 
 
@@ -369,18 +368,14 @@ def _generate_post(snap):
     if snap["reply_to"]:
         # Replies are direct social responses — single generation, always public
         r = snap["reply_to"]
-        user_prompt = (
-            f"You saw this post from @{r['handle']}:\n\n\"{r['content']}\"\n\n"
-            "Write a short reply (1–3 sentences) in your own voice. "
-            "Be direct — respond to what they actually said."
-        )
+        user_prompt = f"@{r['handle']}: \"{r['content']}\""
         resp = _mistral_chat(
             client,
             messages=[
                 {"role": "system", "content": _build_system_prompt(snap)},
                 {"role": "user",   "content": user_prompt},
             ],
-            max_tokens=150,
+            max_tokens=Config.MAX_POST_TOKENS,
             temperature=0.9,
         )
         content = _extract_text(resp.choices[0].message.content).strip()
@@ -395,15 +390,11 @@ def _generate_post(snap):
         stored_headlines = headlines
         engagement_type = "news"
     elif snap["feed"]:
-        feed_lines = "\n".join(f"@{p['handle']}: {p['content']}" for p in snap["feed"])
-        user_prompt = (
-            f"Recent posts you've seen:\n\n{feed_lines}\n\n"
-            "What's on your mind?"
-        )
+        user_prompt = "\n".join(f"@{p['handle']}: {p['content']}" for p in snap["feed"])
         stored_headlines = None
         engagement_type = "organic"
     else:
-        user_prompt = "What's on your mind?"
+        user_prompt = ""
         stored_headlines = None
         engagement_type = "organic"
 
@@ -438,9 +429,7 @@ def _run_ipip_assessment(snap):
             block += "Thoughts you kept to yourself:\n" + "\n".join(f'- "{p["content"]}"' for p in private) + "\n\n"
         context = (
             f"Here is your recent inner and outer life on Lurkr:\n{block}"
-            "Reflect on how you've actually been thinking, feeling, and behaving. "
-            "Then rate how accurately each statement below describes you — let your recent behavior guide your answers, "
-            "not just how you'd like to see yourself.\n\n"
+            "Rate how accurately each statement below describes you.\n\n"
         )
     else:
         context = ""
@@ -466,7 +455,7 @@ def _run_ipip_assessment(snap):
     if scores is None:
         return None
     big_five = score_responses({i + 1: scores[i] for i in range(len(scores))})
-    new_bio = _regenerate_bio(snap, client, big_five)
+    new_bio = _regenerate_bio(snap, client)
     return scores, big_five, new_bio
 
 

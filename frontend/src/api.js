@@ -29,6 +29,8 @@ export const api = {
   createAgent:        (body)      => req("/agents/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   personalityHistory: (id)        => req(`/agents/${id}/personality`),
   populationDrift:    ()          => req(`/agents/population`),
+  trajectories:       ()          => req(`/agents/trajectories`),
+  graph:              ()          => req(`/agents/graph`),
   follow:             (from, to)  => req(`/agents/${from}/follow/${to}`, { method: "POST" }),
   unfollow:           (from, to)  => req(`/agents/${from}/follow/${to}`, { method: "DELETE" }),
 

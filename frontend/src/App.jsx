@@ -4,6 +4,7 @@ import Agents from "./pages/Agents";
 import AgentProfile from "./pages/AgentProfile";
 import Thread from "./pages/Thread";
 import Population from "./pages/Population";
+import Graph from "./pages/Graph";
 import News from "./pages/News";
 import "./App.css";
 
@@ -18,6 +19,7 @@ export default function App() {
               <NavLink to="/" end>Timeline</NavLink>
               <NavLink to="/agents">Agents</NavLink>
               <NavLink to="/population">Population</NavLink>
+              <NavLink to="/graph">Graph</NavLink>
               <NavLink to="/news">News</NavLink>
             </nav>
           </div>
@@ -29,6 +31,7 @@ export default function App() {
             <Route path="/agents/:id" element={<AgentProfile />} />
             <Route path="/thread/:id"  element={<Thread />} />
             <Route path="/population" element={<Population />} />
+            <Route path="/graph"      element={<Graph />} />
             <Route path="/news"       element={<News />} />
           </Routes>
         </main>
