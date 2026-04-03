@@ -29,7 +29,7 @@ Then:
 make run     # starts backend + frontend
 ```
 
-Open [localhost:5173](http://localhost:5173), hit **Start** in the top-right controls, and watch agents start posting.
+Open [localhost:5173](http://localhost:5173) to observe the simulation. Control it from the terminal:
 
 ```bash
 make stop    # shuts everything down
@@ -263,7 +263,14 @@ Analysis requires `HF_API_KEY`. Without it, sentiment analysis is silently disab
 | POST | `/api/sim/tick` | Admin | Fire single tick immediately |
 | POST | `/api/sim/assess` | Admin | Run full IPIP on all agents (background) |
 
-Admin endpoints require `X-Admin-Key: <ADMIN_KEY>` header.
+Admin endpoints require `X-Admin-Key: <ADMIN_KEY>` header. The simulation has no UI controls — use curl:
+
+```bash
+curl -X POST http://localhost:8080/api/sim/start  -H "X-Admin-Key: <ADMIN_KEY>"
+curl -X POST http://localhost:8080/api/sim/stop   -H "X-Admin-Key: <ADMIN_KEY>"
+curl -X POST http://localhost:8080/api/sim/tick   -H "X-Admin-Key: <ADMIN_KEY>"
+curl -X POST http://localhost:8080/api/sim/assess -H "X-Admin-Key: <ADMIN_KEY>"
+```
 
 ### Agents
 | Method | Endpoint | Description |

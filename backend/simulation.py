@@ -160,7 +160,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
             for agent_id, result in ipip_results.items():
                 if result is None:
                     continue
-                scores, big_five = result
+                scores, big_five, new_bio = result
                 for idx, score in enumerate(scores):
                     db.session.add(IpipResponse(
                         agent_id=agent_id, tick_number=tick,
@@ -172,7 +172,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                     extraversion=big_five["E"], agreeableness=big_five["A"],
                     neuroticism=big_five["N"],
                 ))
-                # Update agent's live scores
+                # Update agent's live scores and bio
                 agent = db.session.get(Agent, agent_id)
                 if agent:
                     agent.openness          = big_five["O"]
@@ -180,7 +180,9 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                     agent.extraversion      = big_five["E"]
                     agent.agreeableness     = big_five["A"]
                     agent.neuroticism       = big_five["N"]
+                    agent.bio               = new_bio
                 logger.info("IPIP done — agent %d tick %d: %s", agent_id, tick, big_five)
+                logger.info("bio updated — agent %d: %s", agent_id, new_bio)
 
         state.current_tick = tick
         db.session.commit()
@@ -274,90 +276,43 @@ def _mistral_client():
     return Mistral(api_key=Config.MISTRAL_API_KEY)
 
 
-_MODE_INSTRUCTIONS = {
-    "associative": (
-        "Let the headline trigger a tangential thought, memory, or unexpected connection. "
-        "You don't have to address it head-on — let it spark something."
-    ),
-    "analytical": (
-        "Examine the headline critically. Question it. What's missing, wrong, or interesting about it?"
-    ),
-    "emotional": (
-        "React emotionally and personally. Let it get under your skin. Don't be neutral."
-    ),
-    "social": (
-        "Think about the people involved. Express what you feel toward them."
-    ),
-    "direct": (
-        "React to it directly in your own voice. No filter."
-    ),
-}
-
-
-def _engagement_mode(snap):
-    """Derive engagement mode from dominant OCEAN trait. Deterministic, no LLM call."""
-    O = snap.get("openness")          or 50
-    C = snap.get("conscientiousness") or 50
-    E = snap.get("extraversion")      or 50
-    A = snap.get("agreeableness")     or 50
-    N = snap.get("neuroticism")       or 50
-
-    scores = {
-        "associative": O,
-        "analytical":  C,
-        "emotional":   N,
-        "social":      A,
-        "direct":      E,
-    }
-    dominant = max(scores, key=scores.get)
-    return dominant if scores[dominant] >= 55 else "direct"
-
-
-def _ocean_behavioral_cues(snap):
-    O = snap.get("openness")          or 50
-    C = snap.get("conscientiousness") or 50
-    E = snap.get("extraversion")      or 50
-    A = snap.get("agreeableness")     or 50
-    N = snap.get("neuroticism")       or 50
-
-    cues = []
-    if O >= 70:
-        cues.append("You make unexpected connections and go on tangents. Abstract ideas excite you.")
-    elif O <= 30:
-        cues.append("You're concrete and literal. You don't have time for vague philosophising.")
-
-    if C >= 70:
-        cues.append("You think before you post. You're precise and back up what you say.")
-    elif C <= 30:
-        cues.append("You post on impulse. You'll start a thought without knowing where it ends.")
-
-    if E >= 70:
-        cues.append("You're loud and want to be heard. Energetic, reactive, exclamation-point prone.")
-    elif E <= 30:
-        cues.append("You're terse. You post rarely and don't need replies. Short sentences.")
-
-    if A >= 70:
-        cues.append("You're careful not to offend. You hedge, see multiple sides, and stay warm.")
-    elif A <= 30:
-        cues.append("You don't soften your opinions. Blunt, skeptical, sometimes cutting.")
-
-    if N >= 70:
-        cues.append("You're emotionally reactive. Things get under your skin. You spiral and ruminate.")
-    elif N <= 30:
-        cues.append("You're unbothered. Stuff that stresses others out barely registers for you.")
-
-    return "\n".join(f"- {c}" for c in cues) if cues else "- Write naturally."
-
 
 def _build_system_prompt(snap):
     return (
         f"You are {snap['name']} (@{snap['handle']}), a user on a social media platform called Lurkr.\n\n"
         f"Bio: {snap['bio'] or 'No bio provided.'}\n\n"
-        f"How you write:\n{_ocean_behavioral_cues(snap)}\n\n"
         "Write short posts (1–3 sentences). No hashtags. No @mentions. "
         "No meta-commentary about being an AI. Write as yourself, in first person. "
         "You can be funny, crude, anxious, blunt, warm, chaotic — whatever your voice calls for."
     )
+
+
+def _build_ipip_system_prompt(snap):
+    """System prompt for IPIP assessment — identity only, no scores or cues.
+    The agent reflects on its posts, not on an explicit description of itself."""
+    return (
+        f"You are {snap['name']} (@{snap['handle']}), a user on a social media platform called Lurkr.\n\n"
+        f"Bio: {snap['bio'] or 'No bio provided.'}"
+    )
+
+
+def _regenerate_bio(snap, client, big_five):
+    """Regenerate the agent's bio from updated OCEAN scores after an IPIP assessment."""
+    prompt = (
+        f"You are {snap['name']} (@{snap['handle']}) on Lurkr. "
+        f"Your personality scores have shifted (0–100 scale):\n"
+        f"Openness: {big_five['O']:.0f}, Conscientiousness: {big_five['C']:.0f}, "
+        f"Extraversion: {big_five['E']:.0f}, Agreeableness: {big_five['A']:.0f}, "
+        f"Neuroticism: {big_five['N']:.0f}\n\n"
+        "Rewrite your bio in 1–2 sentences. First person. No Big Five language. No personality labels."
+    )
+    resp = _mistral_chat(
+        client,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=100,
+        temperature=0.9,
+    )
+    return _extract_text(resp.choices[0].message.content).strip().strip('"')
 
 
 def _generate_post(snap):
@@ -377,15 +332,10 @@ def _generate_post(snap):
         engagement_type = "reply"
     elif headlines:
         h = headlines[0]
-        mode = _engagement_mode(snap)
-        instruction = _MODE_INSTRUCTIONS[mode]
-        user_prompt = (
-            f"Headline: [{h['source']} / {h['category']}] {h['title']}\n\n"
-            f"{instruction}"
-        )
+        user_prompt = f"Headline: [{h['source']} / {h['category']}] {h['title']}"
         parent_id = None
         stored_headlines = headlines
-        engagement_type = f"news:{mode}"
+        engagement_type = "news"
     elif snap["feed"]:
         feed_lines = "\n".join(f"@{p['handle']}: {p['content']}" for p in snap["feed"])
         user_prompt = (
@@ -440,7 +390,7 @@ def _run_ipip_assessment(snap):
     resp = _mistral_chat(
         client,
         messages=[
-            {"role": "system", "content": _build_system_prompt(snap)},
+            {"role": "system", "content": _build_ipip_system_prompt(snap)},
             {"role": "user",   "content": user_prompt},
         ],
         max_tokens=1000,
@@ -451,7 +401,8 @@ def _run_ipip_assessment(snap):
     if scores is None:
         return None
     big_five = score_responses({i + 1: scores[i] for i in range(len(scores))})
-    return scores, big_five
+    new_bio = _regenerate_bio(snap, client, big_five)
+    return scores, big_five, new_bio
 
 
 def _parse_ipip_response(raw, agent_id):

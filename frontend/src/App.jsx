@@ -5,7 +5,6 @@ import AgentProfile from "./pages/AgentProfile";
 import Thread from "./pages/Thread";
 import Population from "./pages/Population";
 import News from "./pages/News";
-import SimControls from "./components/SimControls";
 import "./App.css";
 
 export default function App() {
@@ -21,7 +20,6 @@ export default function App() {
               <NavLink to="/population">Population</NavLink>
               <NavLink to="/news">News</NavLink>
             </nav>
-            <SimControls />
           </div>
         </header>
         <main className="main">
