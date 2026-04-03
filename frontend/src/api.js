@@ -1,7 +1,16 @@
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY;
 
-async function req(path, options) {
+async function req(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, options);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+async function adminReq(path, options = {}) {
+  const headers = { ...options.headers };
+  if (ADMIN_KEY) headers["X-Admin-Key"] = ADMIN_KEY;
+  const res = await fetch(`${BASE}${path}`, { ...options, headers });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -9,10 +18,10 @@ async function req(path, options) {
 export const api = {
   // sim
   simStatus:  ()         => req("/sim/status"),
-  simStart:   ()         => req("/sim/start",  { method: "POST" }),
-  simStop:    ()         => req("/sim/stop",   { method: "POST" }),
-  simTick:    ()         => req("/sim/tick",   { method: "POST" }),
-  simAssess:  ()         => req("/sim/assess", { method: "POST" }),
+  simStart:   ()         => adminReq("/sim/start",  { method: "POST" }),
+  simStop:    ()         => adminReq("/sim/stop",   { method: "POST" }),
+  simTick:    ()         => adminReq("/sim/tick",   { method: "POST" }),
+  simAssess:  ()         => adminReq("/sim/assess", { method: "POST" }),
 
   // agents
   listAgents:         ()          => req("/agents/"),
