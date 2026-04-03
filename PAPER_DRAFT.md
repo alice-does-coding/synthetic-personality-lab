@@ -65,11 +65,10 @@ Agent-based models of social dynamics have a long history in computational socia
 
 ## 3. System Architecture
 
-Lurkr consists of three processes:
+Lurkr consists of two processes:
 
-- **Backend (Flask)**: REST API, tick engine, database (SQLite), background threads for tick loop and news analysis
-- **NLP Service (FastAPI)**: Lightweight sentiment and emotion analysis using HuggingFace transformer models, decoupled from the main server
-- **Frontend (React/Vite)**: Real-time visualization of agent activity, personality drift, population dynamics, and news semantics
+- **Backend (Flask)**: REST API, tick engine, database (SQLite), background threads for tick loop and news analysis. Sentiment and emotion analysis of headlines is performed asynchronously via the Hugging Face Inference API, requiring no additional infrastructure.
+- **Frontend (React/Vite)**: Real-time visualization of agent activity, personality drift, population dynamics, and news semantics.
 
 The simulation runs continuously in the background. The frontend is a read-only observatory — it does not participate in generation.
 
@@ -180,12 +179,12 @@ Agents follow a fixed set of peers (default: 5 follows each, randomized at seed 
 
 ### 5.3 Semantic Analysis of Environmental Inputs
 
-News headlines are analyzed for sentiment (valence: -1.0 to +1.0) and emotion (7-class Ekman: joy, sadness, anger, fear, surprise, disgust, neutral) using two transformer models:
+News headlines are analyzed for sentiment (valence: -1.0 to +1.0) and emotion (7-class Ekman: joy, sadness, anger, fear, surprise, disgust, neutral) using two transformer models hosted via the Hugging Face Inference API:
 
 - **Sentiment**: `cardiffnlp/twitter-roberta-base-sentiment-latest` [CITATION: Barbieri et al., 2020] — trained on 124M tweets
 - **Emotion**: `j-hartmann/emotion-english-distilroberta-base` [CITATION: Hartmann, 2022] — GoEmotions dataset
 
-Analysis runs asynchronously in a background thread, preventing NLP latency from blocking the tick loop.
+Analysis is called directly from the backend over HTTPS, eliminating the need for a separate NLP microservice. Calls run asynchronously in a background thread in batches of five headlines every 30 seconds, preventing analysis latency from blocking the tick loop. This design preserves scientific equivalence with a locally-hosted deployment — the same models and weights are used — while removing infrastructure overhead.
 
 ---
 

@@ -5,6 +5,8 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import requests
+
 from mistralai.client import Mistral
 from mistralai.client.models import TextChunk
 
@@ -122,13 +124,15 @@ def _run_tick_inner(app, force=False, force_ipip=False):
 
             for agent_id, result in post_results.items():
                 if result:
-                    content, parent_id, news_context = result
+                    content, parent_id, news_context, engagement_type, prompt = result
                     db.session.add(Post(
                         agent_id=agent_id,
                         content=content,
                         tick_number=tick,
                         parent_id=parent_id,
                         news_context=news_context,
+                        engagement_type=engagement_type,
+                        prompt=prompt,
                     ))
                     # Register any new headlines for semantic analysis
                     if news_context:
@@ -270,6 +274,45 @@ def _mistral_client():
     return Mistral(api_key=Config.MISTRAL_API_KEY)
 
 
+_MODE_INSTRUCTIONS = {
+    "associative": (
+        "Let the headline trigger a tangential thought, memory, or unexpected connection. "
+        "You don't have to address it head-on — let it spark something."
+    ),
+    "analytical": (
+        "Examine the headline critically. Question it. What's missing, wrong, or interesting about it?"
+    ),
+    "emotional": (
+        "React emotionally and personally. Let it get under your skin. Don't be neutral."
+    ),
+    "social": (
+        "Think about the people involved. Express what you feel toward them."
+    ),
+    "direct": (
+        "React to it directly in your own voice. No filter."
+    ),
+}
+
+
+def _engagement_mode(snap):
+    """Derive engagement mode from dominant OCEAN trait. Deterministic, no LLM call."""
+    O = snap.get("openness")          or 50
+    C = snap.get("conscientiousness") or 50
+    E = snap.get("extraversion")      or 50
+    A = snap.get("agreeableness")     or 50
+    N = snap.get("neuroticism")       or 50
+
+    scores = {
+        "associative": O,
+        "analytical":  C,
+        "emotional":   N,
+        "social":      A,
+        "direct":      E,
+    }
+    dominant = max(scores, key=scores.get)
+    return dominant if scores[dominant] >= 55 else "direct"
+
+
 def _ocean_behavioral_cues(snap):
     O = snap.get("openness")          or 50
     C = snap.get("conscientiousness") or 50
@@ -321,10 +364,6 @@ def _generate_post(snap):
     client = _mistral_client()
 
     headlines = snap.get("headlines", [])
-    news_block = ""
-    if headlines:
-        h = headlines[0]
-        news_block = f"\nA headline you saw today: [{h['source']} / {h['category']}] {h['title']}\n"
 
     if snap["reply_to"]:
         r = snap["reply_to"]
@@ -335,23 +374,32 @@ def _generate_post(snap):
         )
         parent_id = r["id"]
         stored_headlines = None
+        engagement_type = "reply"
+    elif headlines:
+        h = headlines[0]
+        mode = _engagement_mode(snap)
+        instruction = _MODE_INSTRUCTIONS[mode]
+        user_prompt = (
+            f"Headline: [{h['source']} / {h['category']}] {h['title']}\n\n"
+            f"{instruction}"
+        )
+        parent_id = None
+        stored_headlines = headlines
+        engagement_type = f"news:{mode}"
     elif snap["feed"]:
         feed_lines = "\n".join(f"@{p['handle']}: {p['content']}" for p in snap["feed"])
         user_prompt = (
-            f"Recent posts you've seen:\n\n{feed_lines}\n"
-            f"{news_block}\n"
-            "Write your next post. You can react to the headline, riff on something someone said, "
-            "or post whatever is on your mind."
+            f"Recent posts you've seen:\n\n{feed_lines}\n\n"
+            "Write your next post. Riff on something someone said, or post whatever is on your mind."
         )
         parent_id = None
-        stored_headlines = headlines if headlines else None
+        stored_headlines = None
+        engagement_type = "organic"
     else:
-        user_prompt = (
-            f"{news_block}\n"
-            "Write your next post. You can react to the headline or just post whatever is on your mind."
-        ).strip()
+        user_prompt = "Write your next post. Say whatever is on your mind."
         parent_id = None
-        stored_headlines = headlines if headlines else None
+        stored_headlines = None
+        engagement_type = "organic"
 
     resp = _mistral_chat(
         client,
@@ -363,7 +411,7 @@ def _generate_post(snap):
         temperature=0.9,
     )
     content = _extract_text(resp.choices[0].message.content).strip()
-    return content, parent_id, stored_headlines
+    return content, parent_id, stored_headlines, engagement_type, user_prompt
 
 
 def _run_ipip_assessment(snap):
@@ -420,51 +468,83 @@ def _parse_ipip_response(raw, agent_id):
     return scores
 
 
-# ── News semantic analysis ────────────────────────────────────────────────────
+# ── News semantic analysis (Hugging Face Inference API) ──────────────────────
 
-def _call_nlp_service(text):
-    """Call the local NLP microservice. Returns (sentiment_score, emotion_label) or None."""
-    import urllib.request, json as _json
-    payload = _json.dumps({"text": text}).encode()
-    req = urllib.request.Request(
-        Config.NLP_SERVICE_URL + "/analyze",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        data = _json.loads(resp.read())
-    sentiment = data["sentiment"]["score"]
-    emotion   = data["emotion"]["label"]
-    return sentiment, emotion
+_HF_SENTIMENT_URL = "https://router.huggingface.co/hf-inference/models/cardiffnlp/twitter-roberta-base-sentiment-latest"
+_HF_EMOTION_URL   = "https://router.huggingface.co/hf-inference/models/j-hartmann/emotion-english-distilroberta-base"
 
 
-def _analyze_news_item(item_id, title, app):
-    """Run sentiment + emotion analysis on a single headline via the NLP service."""
+def _hf_infer_batch(url, texts, headers, retries=3):
+    """POST a batch of texts to a HF Inference API endpoint.
+    Retries on HTTP 503 and on 200+error-body (model still loading)."""
+    for attempt in range(retries):
+        resp = requests.post(url, json={"inputs": texts}, headers=headers, timeout=30)
+        if resp.status_code == 503:
+            wait = 20 * (attempt + 1)
+            logger.info("HF model loading (503) — retrying in %ds", wait)
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        result = resp.json()
+        # HF sometimes returns 200 with {"error": "..."} while the model warms up
+        if isinstance(result, dict) and "error" in result:
+            wait = 20 * (attempt + 1)
+            logger.info("HF model loading (error body) — retrying in %ds", wait)
+            time.sleep(wait)
+            continue
+        return result
+    raise RuntimeError("HF model failed to load after retries")
+
+
+def _analyze_news_batch(items, app):
+    """Analyze a batch of (item_id, title) pairs via HF Inference API and persist results.
+    Two API calls total (sentiment + emotion) regardless of batch size."""
+    key = Config.HF_API_KEY
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+
+    titles = [title for _, title in items]
+    try:
+        sent_results = _hf_infer_batch(_HF_SENTIMENT_URL, titles, headers)
+        emo_results  = _hf_infer_batch(_HF_EMOTION_URL,   titles, headers)
+    except Exception:
+        logger.exception("HF batch analysis failed")
+        return
+
+    # The serverless API packs all per-input top labels into a single inner list:
+    # [[result_input0, result_input1, ...]] — so we index via [0][i].
+    _SENT_SCORE = {"positive": 1.0, "neutral": 0.0, "negative": -1.0}
+
     with app.app_context():
-        try:
-            sentiment, emotion = _call_nlp_service(title)
-            item = NewsItem.query.get(item_id)
+        for i, (item_id, title) in enumerate(items):
+            sent = sent_results[0][i]
+            emo  = emo_results[0][i]
+            sentiment = round(_SENT_SCORE.get(sent["label"].lower(), 0.0), 4)
+            emotion   = emo["label"].lower()
+            item = db.session.get(NewsItem, item_id)
             if item:
                 item.sentiment = sentiment
                 item.emotion   = emotion
                 item.analyzed  = True
-                db.session.commit()
-                logger.info("news analyzed — %s → sentiment:%.2f emotion:%s", title[:50], sentiment, emotion)
-        except Exception:
-            logger.exception("news analysis failed for item %d", item_id)
+                logger.info("news analyzed — %s → sentiment:%.2f emotion:%s",
+                            title[:50], sentiment, emotion)
+        db.session.commit()
 
 
 def start_news_analyzer(app):
-    """Background thread: analyze unanalyzed news items as they accumulate."""
+    """Background thread: analyze unanalyzed news items via HF Inference API."""
+    if not Config.HF_API_KEY:
+        logger.info("HF_API_KEY not set — news sentiment analysis disabled")
+        return
+
     def loop():
         while True:
             time.sleep(30)
             with app.app_context():
                 unanalyzed = NewsItem.query.filter_by(analyzed=False).limit(5).all()
                 items = [(i.id, i.title) for i in unanalyzed]
-            for item_id, title in items:
-                _analyze_news_item(item_id, title, app)
+            if items:
+                _analyze_news_batch(items, app)
 
-    t = threading.Thread(target=loop, daemon=True)
-    t.start()
+    threading.Thread(target=loop, daemon=True).start()

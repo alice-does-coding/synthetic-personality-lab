@@ -23,7 +23,7 @@ function Avatar({ name, handle }) {
   );
 }
 
-function Headline({ h }) {
+function Headline({ h, mode }) {
   return (
     <div style={{
       display: "flex", alignItems: "baseline", gap: 8,
@@ -36,7 +36,7 @@ function Headline({ h }) {
         fontSize: 10, fontWeight: 700, color: "var(--accent)",
         textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap", flexShrink: 0,
       }}>
-        {h.source} · {h.category}
+        {h.source} · {h.category}{mode ? ` · ${mode}` : ""}
       </span>
       {h.url ? (
         <a href={h.url} target="_blank" rel="noopener noreferrer" style={{
@@ -60,6 +60,7 @@ export default function PostCard({ post, depth = 0 }) {
 
   const threadCount = post.thread_count ?? post.reply_count ?? 0;
   const headline = post.news_context?.[0];
+  const mode = post.engagement_type?.startsWith("news:") ? post.engagement_type.split(":")[1] : null;
 
   return (
     <div style={{ marginBottom: depth === 0 ? 10 : 6 }}>
@@ -73,7 +74,7 @@ export default function PostCard({ post, depth = 0 }) {
         }}
       >
         {/* headline at top */}
-        {headline && <Headline h={headline} />}
+        {headline && <Headline h={headline} mode={mode} />}
 
         <div style={{ display: "flex", gap: 14 }}>
           {/* avatar */}

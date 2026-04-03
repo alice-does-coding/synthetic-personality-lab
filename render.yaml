@@ -12,6 +12,8 @@ services:
         sync: false
       - key: SIMULATION_TICK_SECONDS
         value: 30
+      - key: HF_API_KEY
+        sync: false
       - key: ADMIN_KEY
         sync: false
       - key: CORS_ORIGINS

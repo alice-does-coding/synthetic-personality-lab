@@ -1,0 +1,18 @@
+# Check sim status (no key needed)
+curl https://lurkr-api.onrender.com/api/sim/status
+
+# Start the simulation
+curl -X POST https://lurkr-api.onrender.com/api/sim/start \
+  -H "X-Admin-Key: your-admin-key"
+
+# Stop the simulation
+curl -X POST https://lurkr-api.onrender.com/api/sim/stop \
+  -H "X-Admin-Key: your-admin-key"
+
+# Force a single tick
+curl -X POST https://lurkr-api.onrender.com/api/sim/tick \
+  -H "X-Admin-Key: your-admin-key"
+
+# Run a full IPIP assessment
+curl -X POST https://lurkr-api.onrender.com/api/sim/assess \
+  -H "X-Admin-Key: your-admin-key"

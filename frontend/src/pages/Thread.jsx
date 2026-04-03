@@ -22,7 +22,7 @@ function Avatar({ name, handle, size = 36 }) {
   );
 }
 
-function Headline({ h }) {
+function Headline({ h, mode }) {
   return (
     <div style={{
       display: "flex", alignItems: "baseline", gap: 8,
@@ -34,7 +34,7 @@ function Headline({ h }) {
         fontSize: 10, fontWeight: 700, color: "var(--accent)",
         textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap", flexShrink: 0,
       }}>
-        {h.source} · {h.category}
+        {h.source} · {h.category}{mode ? ` · ${mode}` : ""}
       </span>
       {h.url ? (
         <a href={h.url} target="_blank" rel="noopener noreferrer" style={{
@@ -54,6 +54,7 @@ function ThreadPost({ post, descendants, isCollapsed, onToggle }) {
   const depth = post.depth ?? 0;
   const time = new Date(post.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const headline = post.news_context?.[0];
+  const mode = post.engagement_type?.startsWith("news:") ? post.engagement_type.split(":")[1] : null;
   const hasChildren = descendants > 0;
   const INDENT = 44;
 
@@ -117,7 +118,7 @@ function ThreadPost({ post, descendants, isCollapsed, onToggle }) {
         </div>
 
         {/* Headline */}
-        {headline && <Headline h={headline} />}
+        {headline && <Headline h={headline} mode={mode} />}
 
         {/* Content */}
         {!isCollapsed && (

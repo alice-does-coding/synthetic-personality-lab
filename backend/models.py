@@ -66,6 +66,8 @@ class Post(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
     news_context = db.Column(db.JSON, nullable=True)  # headlines shown to agent when post was generated
     embedding = db.Column(db.JSON, nullable=True)
+    engagement_type = db.Column(db.String(20), nullable=True)  # 'news', 'organic', 'reply'
+    prompt = db.Column(db.Text, nullable=True)  # full user prompt sent to the LLM
 
     replies = db.relationship(
         "Post",
@@ -94,6 +96,8 @@ class Post(db.Model):
             "reply_count": len(self.replies),
             "thread_count": self._thread_count(),
             "news_context": self.news_context,
+            "engagement_type": self.engagement_type,
+            "prompt": self.prompt,
             "agent_openness": self.agent.openness if self.agent else None,
             "agent_conscientiousness": self.agent.conscientiousness if self.agent else None,
             "agent_extraversion": self.agent.extraversion if self.agent else None,
