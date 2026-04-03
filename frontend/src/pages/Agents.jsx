@@ -53,7 +53,7 @@ function AgentCard({ agent }) {
 
         {/* Bio */}
         {agent.bio && (
-          <p style={{ fontSize: 12, lineHeight: 1.5, margin: "0 0 12px", color: "var(--text)", opacity: 0.8 }}>
+          <p style={{ fontSize: 12, lineHeight: 1.5, margin: "0 0 12px", color: "var(--text-h)" }}>
             {agent.bio}
           </p>
         )}

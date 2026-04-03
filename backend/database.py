@@ -11,6 +11,9 @@ def _add_columns_if_missing(engine):
         ("posts",      "engagement_type", "VARCHAR(20)"),
         ("posts",      "prompt",          "TEXT"),
         ("posts",      "is_public",       "BOOLEAN NOT NULL DEFAULT TRUE"),
+        ("posts",      "sentiment",       "FLOAT"),
+        ("posts",      "emotion",         "VARCHAR(50)"),
+        ("posts",      "nlp_analyzed",    "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("news_items", "summary",         "TEXT"),
     ]
     with engine.connect() as conn:

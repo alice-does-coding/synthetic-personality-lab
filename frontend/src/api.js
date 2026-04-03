@@ -35,10 +35,13 @@ export const api = {
   unfollow:           (from, to)  => req(`/agents/${from}/follow/${to}`, { method: "DELETE" }),
 
   // news
-  listNews:                ()       => req("/news/"),
-  newsPosts:               (id)     => req(`/news/${id}/posts`),
-  newsSentimentOverTime:   ()       => req("/news/sentiment-over-time"),
+  listNews:                   ()    => req("/news/"),
+  newsPosts:                  (id)  => req(`/news/${id}/posts`),
+  newsSentimentOverTime:      ()    => req("/news/sentiment-over-time"),
   newsPersonalityCorrelation: ()    => req("/news/personality-correlation"),
+  postSentimentOverTime:      ()    => req("/news/post-sentiment-over-time"),
+  postPersonalityCorrelation: ()    => req("/news/post-personality-correlation"),
+  sentimentContagion:         ()    => req("/news/contagion"),
 
   // posts
   listPosts:  (limit = 50, agentId) => req(`/posts/?limit=${limit}${agentId ? `&agent_id=${agentId}` : ""}`),

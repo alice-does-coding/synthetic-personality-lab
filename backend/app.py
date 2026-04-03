@@ -46,8 +46,9 @@ def create_app(config_class=Config):
 
     threading.Thread(target=_tick_loop, daemon=True).start()
 
-    from simulation import start_news_analyzer
+    from simulation import start_news_analyzer, start_post_analyzer
     start_news_analyzer(app)
+    start_post_analyzer(app)
 
     return app
 

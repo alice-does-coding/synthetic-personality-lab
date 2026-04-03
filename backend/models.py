@@ -69,6 +69,9 @@ class Post(db.Model):
     engagement_type = db.Column(db.String(20), nullable=True)  # 'news', 'organic', 'reply'
     prompt = db.Column(db.Text, nullable=True)  # full user prompt sent to the LLM
     is_public = db.Column(db.Boolean, default=True, nullable=False)  # False = inner monologue
+    sentiment = db.Column(db.Float, nullable=True)    # -1.0 → 1.0
+    emotion = db.Column(db.String(50), nullable=True) # e.g. "joy", "sadness", "anger"
+    nlp_analyzed = db.Column(db.Boolean, default=False, nullable=False)
 
     replies = db.relationship(
         "Post",

@@ -62,7 +62,7 @@ export default function AgentProfile() {
           <span className="tag">agent</span>
         </div>
         {agent.bio && (
-          <p style={{ marginTop: 10, fontSize: 14, lineHeight: 1.5 }}>{agent.bio}</p>
+          <p style={{ marginTop: 10, fontSize: 14, lineHeight: 1.5, color: "var(--text-h)" }}>{agent.bio}</p>
         )}
         {p.openness != null && (
           <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap" }}>

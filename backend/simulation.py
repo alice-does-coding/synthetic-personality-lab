@@ -546,6 +546,62 @@ def _analyze_news_batch(items, app):
         db.session.commit()
 
 
+def _analyze_post_batch(post_ids_and_texts, app):
+    """Analyze a batch of (post_id, content) tuples via HF Inference API and persist results."""
+    key = Config.HF_API_KEY
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+
+    texts = [content for _, content in post_ids_and_texts]
+    try:
+        sent_results = _hf_infer_batch(_HF_SENTIMENT_URL, texts, headers)
+        emo_results  = _hf_infer_batch(_HF_EMOTION_URL,   texts, headers)
+    except Exception:
+        logger.exception("HF post batch analysis failed")
+        return
+
+    _SENT_SCORE = {"positive": 1.0, "neutral": 0.0, "negative": -1.0}
+
+    with app.app_context():
+        for i, (post_id, _) in enumerate(post_ids_and_texts):
+            sent = sent_results[0][i]
+            emo  = emo_results[0][i]
+            sentiment = round(_SENT_SCORE.get(sent["label"].lower(), 0.0), 4)
+            emotion   = emo["label"].lower()
+            post = db.session.get(Post, post_id)
+            if post:
+                post.sentiment    = sentiment
+                post.emotion      = emotion
+                post.nlp_analyzed = True
+        db.session.commit()
+    logger.info("post NLP batch done — %d posts analyzed", len(post_ids_and_texts))
+
+
+def start_post_analyzer(app):
+    """Background thread: analyze unanalyzed public posts via HF Inference API."""
+    if not Config.HF_API_KEY:
+        return
+
+    def loop():
+        while True:
+            time.sleep(45)
+            with app.app_context():
+                unanalyzed = (
+                    Post.query
+                    .filter_by(nlp_analyzed=False, is_public=True)
+                    .filter(Post.parent_id.is_(None))  # top-level posts only
+                    .order_by(Post.id)
+                    .limit(10)
+                    .all()
+                )
+                batch = [(p.id, p.content) for p in unanalyzed]
+            if batch:
+                _analyze_post_batch(batch, app)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
 def start_news_analyzer(app):
     """Background thread: analyze unanalyzed news items via HF Inference API."""
     if not Config.HF_API_KEY:

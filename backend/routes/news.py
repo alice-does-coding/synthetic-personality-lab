@@ -1,5 +1,6 @@
+from collections import defaultdict
+
 from flask import Blueprint, jsonify
-from sqlalchemy import func
 
 from models import Agent, NewsItem, Post
 
@@ -63,6 +64,116 @@ def sentiment_over_time():
         {"tick_number": tick, "avg_sentiment": sum(vals) / len(vals), "count": len(vals)}
         for tick, vals in sorted(by_tick.items())
     ]
+    return jsonify(result)
+
+
+@news_bp.route("/post-sentiment-over-time", methods=["GET"])
+def post_sentiment_over_time():
+    """Average sentiment + emotion of agent posts per tick."""
+    posts = (
+        Post.query
+        .filter_by(nlp_analyzed=True, is_public=True)
+        .filter(Post.parent_id.is_(None))
+        .order_by(Post.tick_number)
+        .all()
+    )
+    by_tick = defaultdict(lambda: {"sentiments": [], "emotions": []})
+    for post in posts:
+        by_tick[post.tick_number]["sentiments"].append(post.sentiment)
+        if post.emotion:
+            by_tick[post.tick_number]["emotions"].append(post.emotion)
+
+    result = []
+    for tick, data in sorted(by_tick.items()):
+        sents = data["sentiments"]
+        emotions = data["emotions"]
+        emotion_counts = {}
+        for e in emotions:
+            emotion_counts[e] = emotion_counts.get(e, 0) + 1
+        dominant = max(emotion_counts, key=emotion_counts.get) if emotion_counts else None
+        result.append({
+            "tick_number":      tick,
+            "avg_sentiment":    round(sum(sents) / len(sents), 4),
+            "count":            len(sents),
+            "dominant_emotion": dominant,
+            "emotion_counts":   emotion_counts,
+        })
+    return jsonify(result)
+
+
+@news_bp.route("/post-personality-correlation", methods=["GET"])
+def post_personality_correlation():
+    """For each agent: avg sentiment of their own posts + OCEAN scores."""
+    agents = {a.id: a for a in Agent.query.filter_by(is_active=True).all()}
+    posts = (
+        Post.query
+        .filter_by(nlp_analyzed=True, is_public=True)
+        .filter(Post.parent_id.is_(None))
+        .all()
+    )
+
+    by_agent = defaultdict(list)
+    for post in posts:
+        if post.sentiment is not None:
+            by_agent[post.agent_id].append(post.sentiment)
+
+    result = []
+    for agent_id, sentiments in by_agent.items():
+        agent = agents.get(agent_id)
+        if not agent or agent.openness is None:
+            continue
+        result.append({
+            "agent_id":          agent_id,
+            "agent_handle":      agent.handle,
+            "agent_name":        agent.name,
+            "avg_sentiment":     round(sum(sentiments) / len(sentiments), 4),
+            "post_count":        len(sentiments),
+            "openness":          agent.openness,
+            "conscientiousness": agent.conscientiousness,
+            "extraversion":      agent.extraversion,
+            "agreeableness":     agent.agreeableness,
+            "neuroticism":       agent.neuroticism,
+        })
+    return jsonify(result)
+
+
+@news_bp.route("/contagion", methods=["GET"])
+def sentiment_contagion():
+    """Per tick: avg news sentiment vs avg post sentiment — tests emotional contagion."""
+    news_by_tick = {}
+    news_items = {i.url: i.sentiment for i in NewsItem.query.filter_by(analyzed=True).all()}
+    news_posts = Post.query.filter(Post.news_context.isnot(None)).order_by(Post.tick_number).all()
+    for post in news_posts:
+        sents = [
+            news_items[h["url"]]
+            for h in (post.news_context or [])
+            if h.get("url") in news_items and news_items[h["url"]] is not None
+        ]
+        if sents:
+            bucket = news_by_tick.setdefault(post.tick_number, [])
+            bucket.extend(sents)
+
+    post_by_tick = defaultdict(list)
+    analyzed_posts = (
+        Post.query
+        .filter_by(nlp_analyzed=True, is_public=True)
+        .filter(Post.parent_id.is_(None))
+        .all()
+    )
+    for post in analyzed_posts:
+        if post.sentiment is not None:
+            post_by_tick[post.tick_number].append(post.sentiment)
+
+    all_ticks = sorted(set(list(news_by_tick.keys()) + list(post_by_tick.keys())))
+    result = []
+    for tick in all_ticks:
+        ns = news_by_tick.get(tick)
+        ps = post_by_tick.get(tick)
+        result.append({
+            "tick_number":    tick,
+            "news_sentiment": round(sum(ns) / len(ns), 4) if ns else None,
+            "post_sentiment": round(sum(ps) / len(ps), 4) if ps else None,
+        })
     return jsonify(result)
 
 

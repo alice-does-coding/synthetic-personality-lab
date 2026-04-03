@@ -1,50 +1,75 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
-  ScatterChart, Scatter, ZAxis, CartesianGrid,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  ReferenceLine, CartesianGrid, Cell,
 } from "recharts";
 import { api } from "../api";
 import PostCard from "../components/PostCard";
 
+const TRAITS = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"];
 const TRAIT_COLORS = {
-  openness:          "#8b5cf6",
-  conscientiousness: "#3b82f6",
-  extraversion:      "#f59e0b",
-  agreeableness:     "#22c55e",
-  neuroticism:       "#ef4444",
+  openness:          "#a78bfa",
+  conscientiousness: "#818cf8",
+  extraversion:      "#f472b6",
+  agreeableness:     "#2dd4bf",
+  neuroticism:       "#fb7185",
 };
 
 const EMOTION_COLORS = {
-  anxiety:    "#ef4444",
-  anger:      "#dc2626",
-  outrage:    "#b91c1c",
-  fear:       "#f97316",
-  sadness:    "#6366f1",
-  disgust:    "#a855f7",
-  hope:       "#22c55e",
-  optimism:   "#10b981",
-  excitement: "#f59e0b",
-  curiosity:  "#3b82f6",
-  pride:      "#8b5cf6",
-  surprise:   "#06b6d4",
+  joy:      "#f472b6",
+  surprise: "#c77dff",
+  neutral:  "#555",
+  sadness:  "#818cf8",
+  anger:    "#fb7185",
+  disgust:  "#a78bfa",
+  fear:     "#ff3ea5",
+  anxiety:  "#fb7185",
+  optimism: "#2dd4bf",
+  curiosity:"#a78bfa",
 };
 
-function SentimentBadge({ sentiment, emotion }) {
-  if (sentiment == null) return <span className="muted" style={{ fontSize: 11 }}>analyzing…</span>;
-  const color = sentiment > 0.2 ? "#22c55e" : sentiment < -0.2 ? "#ef4444" : "#f59e0b";
-  const emoColor = EMOTION_COLORS[emotion] ?? "var(--text)";
+function SentimentBar({ value }) {
+  if (value == null) return <span className="muted">—</span>;
+  const color = value > 0.1 ? "#2dd4bf" : value < -0.1 ? "#fb7185" : "#555";
   return (
-    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-      <div style={{
-        width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0,
-      }} />
-      <span style={{ fontSize: 11, fontWeight: 600, color }}>
-        {sentiment > 0 ? "+" : ""}{sentiment.toFixed(2)}
-      </span>
-      {emotion && (
-        <span style={{ fontSize: 11, color: emoColor, fontStyle: "italic" }}>{emotion}</span>
-      )}
+    <span style={{ color, fontWeight: 700, fontSize: 12 }}>
+      {value > 0 ? "+" : ""}{value.toFixed(2)}
+    </span>
+  );
+}
+
+function SectionHeader({ label, sub }) {
+  return (
+    <div style={{ marginBottom: 12, borderBottom: "1px solid var(--border)", paddingBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-h)" }}>
+        {label}
+      </div>
+      {sub && <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function TraitTabs({ active, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 0 }}>
+      {TRAITS.map((t) => {
+        const on = active === t;
+        return (
+          <button key={t} onClick={() => onChange(t)} style={{
+            fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700,
+            textTransform: "uppercase", letterSpacing: "0.06em",
+            padding: "3px 10px",
+            border: "1px solid var(--border)",
+            borderRight: "none",
+            background: on ? TRAIT_COLORS[t] : "var(--bg)",
+            color: on ? "#000" : TRAIT_COLORS[t],
+            cursor: "pointer",
+          }}>
+            {t.slice(0, 3)}
+          </button>
+        );
+      })}
+      <div style={{ width: 1, background: "var(--border)" }} />
     </div>
   );
 }
@@ -54,32 +79,30 @@ function HeadlineRow({ item, selected, onSelect }) {
     <div
       onClick={() => onSelect(selected ? null : item)}
       style={{
-        padding: "10px 12px",
-        borderRadius: 8,
+        padding: "8px 10px",
         cursor: "pointer",
-        background: selected ? "var(--accent-bg, #1e1b4b22)" : "transparent",
-        border: `1px solid ${selected ? "var(--accent-border, #6366f1)" : "var(--border)"}`,
-        marginBottom: 6,
+        borderBottom: "1px solid var(--border)",
+        background: selected ? "var(--accent-bg)" : "transparent",
+        borderLeft: selected ? "2px solid var(--pink)" : "2px solid transparent",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ flex: 1 }}>
           <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={item.url} target="_blank" rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            style={{ fontSize: 13, color: "var(--text-h)", lineHeight: 1.4 }}
+            style={{ fontSize: 12, color: "var(--text-h)", lineHeight: 1.4, textDecoration: "none" }}
           >
             {item.title}
           </a>
-          <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
+          <div style={{ fontSize: 10, color: "var(--text)", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
             {item.source} · {item.category}
+            {item.emotion && <span style={{ color: EMOTION_COLORS[item.emotion] ?? "var(--text)", marginLeft: 6 }}>{item.emotion}</span>}
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <SentimentBadge sentiment={item.sentiment} emotion={item.emotion} />
-          <span className="muted" style={{ fontSize: 11 }}>{item.engagement} posts</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+          <SentimentBar value={item.sentiment} />
+          <span className="muted" style={{ fontSize: 10 }}>{item.engagement} posts</span>
         </div>
       </div>
     </div>
@@ -91,145 +114,207 @@ function HeadlinePosts({ item }) {
   useEffect(() => {
     api.newsPosts(item.id).then(setPosts).catch(() => setPosts([]));
   }, [item.id]);
+  if (!posts) return <p className="muted" style={{ padding: 12 }}>loading…</p>;
+  if (!posts.length) return <p className="muted" style={{ padding: 12 }}>no posts for this headline yet.</p>;
+  return posts.map((p) => <PostCard key={p.id} post={p} />);
+}
 
-  if (!posts) return <p className="muted">Loading…</p>;
-  if (posts.length === 0) return <p className="muted">No posts yet for this headline.</p>;
+function TraitMiniBar({ score, color }) {
   return (
-    <div>
-      {posts.map((p) => <PostCard key={p.id} post={p} />)}
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, width: 48 }}>
+      <div style={{ height: 4, background: "var(--border)", position: "relative" }}>
+        <div style={{
+          position: "absolute", left: 0, top: 0,
+          width: `${score ?? 0}%`, height: "100%",
+          background: color, opacity: 0.75,
+        }} />
+      </div>
+      <span style={{ fontSize: 9, color, fontWeight: 700, textAlign: "right" }}>
+        {score != null ? Math.round(score) : "—"}
+      </span>
+    </div>
+  );
+}
+
+function SentimentMiniBar({ value }) {
+  const pct = Math.abs(value) * 50; // 0–50% of half-width
+  const positive = value >= 0;
+  const color = positive ? "#2dd4bf" : "#fb7185";
+  return (
+    <div style={{ position: "relative", width: 120, height: 12 }}>
+      {/* center line */}
+      <div style={{ position: "absolute", left: "50%", top: 0, width: 1, height: "100%", background: "var(--border)" }} />
+      {/* bar */}
+      <div style={{
+        position: "absolute",
+        top: 2, height: 8,
+        background: color,
+        opacity: 0.6 + 0.4 * Math.abs(value),
+        left:  positive ? "50%" : `calc(50% - ${pct}%)`,
+        width: `${pct}%`,
+      }} />
+    </div>
+  );
+}
+
+function AgentProfileGrid({ data }) {
+  if (!data.length) return <p className="muted">need more analyzed posts — check back soon.</p>;
+
+  const sorted = [...data].sort((a, b) => a.avg_sentiment - b.avg_sentiment);
+  const colStyle = { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text)", padding: "0 8px 6px" };
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--mono)" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--border)" }}>
+            <th style={{ ...colStyle, textAlign: "left", paddingLeft: 0, width: 120 }}>agent</th>
+            {TRAITS.map(t => (
+              <th key={t} style={{ ...colStyle, textAlign: "center", color: TRAIT_COLORS[t] }}>
+                {t.slice(0, 3)}
+              </th>
+            ))}
+            <th style={{ ...colStyle, textAlign: "center", width: 160 }}>
+              <span style={{ color: "#fb7185" }}>neg</span>
+              <span style={{ color: "var(--text)", margin: "0 4px" }}>·</span>
+              <span style={{ color: "#2dd4bf" }}>pos</span>
+            </th>
+            <th style={{ ...colStyle, textAlign: "right", width: 60 }}>score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((d) => (
+            <tr key={d.agent_id} style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "8px 0", fontSize: 12, color: "var(--text-h)", fontWeight: 600 }}>
+                @{d.agent_handle}
+              </td>
+              {TRAITS.map(t => (
+                <td key={t} style={{ padding: "8px 8px", textAlign: "center" }}>
+                  <TraitMiniBar score={d[t]} color={TRAIT_COLORS[t]} />
+                </td>
+              ))}
+              <td style={{ padding: "8px 8px", textAlign: "center" }}>
+                <SentimentMiniBar value={d.avg_sentiment} />
+              </td>
+              <td style={{ padding: "8px 0", textAlign: "right", fontSize: 11, fontWeight: 700,
+                color: d.avg_sentiment >= 0 ? "#2dd4bf" : "#fb7185" }}>
+                {d.avg_sentiment >= 0 ? "+" : ""}{d.avg_sentiment.toFixed(2)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 export default function News() {
-  const [items,       setItems]       = useState([]);
-  const [sentiment,   setSentiment]   = useState([]);
-  const [correlation, setCorrelation] = useState([]);
-  const [selected,    setSelected]    = useState(null);
-  const [traitX,      setTraitX]      = useState("neuroticism");
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
+  const [items,        setItems]        = useState([]);
+  const [newsOverTime, setNewsOverTime] = useState([]);
+  const [postOverTime, setPostOverTime] = useState([]);
+  const [contagion,    setContagion]    = useState([]);
+  const [correlation,  setCorrelation]  = useState([]);
+  const [selected,     setSelected]     = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
 
   useEffect(() => {
     Promise.all([
       api.listNews(),
       api.newsSentimentOverTime(),
-      api.newsPersonalityCorrelation(),
+      api.postSentimentOverTime(),
+      api.sentimentContagion(),
+      api.postPersonalityCorrelation(),
     ])
-      .then(([n, s, c]) => { setItems(n); setSentiment(s); setCorrelation(c); })
+      .then(([n, ns, ps, c, corr]) => {
+        setItems(n);
+        setNewsOverTime(ns);
+        setPostOverTime(ps);
+        setContagion(c);
+        setCorrelation(corr);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p className="muted">Loading…</p>;
-  if (error)   return <p className="error">{error}</p>;
+  if (loading) return <p className="muted" style={{ padding: 20 }}>loading…</p>;
+  if (error)   return <p className="error"  style={{ padding: 20 }}>{error}</p>;
 
   const analyzed = items.filter((i) => i.analyzed);
 
+  // Merge contagion series for the dual-line chart
+  const contagionMerged = contagion.filter(d => d.news_sentiment != null && d.post_sentiment != null);
+
   return (
-    <div>
-      <h1 className="page-title" style={{ marginBottom: 20 }}>News</h1>
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 
-      {/* ── Section 1: Sentiment over time ── */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-h)", marginBottom: 4 }}>
-          News sentiment over time
+      {/* ── Row 1: two time-series side by side ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid var(--border)" }}>
+
+        {/* Post sentiment over time */}
+        <div style={{ padding: 16, borderRight: "1px solid var(--border)" }}>
+          <SectionHeader
+            label="Post sentiment · over time"
+            sub="avg sentiment of agent posts per tick"
+          />
+          {postOverTime.length === 0 ? (
+            <p className="muted">posts are being analyzed in the background — check back in a minute.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={postOverTime} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
+                <XAxis dataKey="tick_number" tick={{ fontSize: 10, fontFamily: "var(--mono)" }} />
+                <YAxis domain={[-1, 1]} tick={{ fontSize: 10, fontFamily: "var(--mono)" }} />
+                <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="4 4" />
+                <Line type="monotone" dataKey="avg_sentiment" stroke="#ff3ea5" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-          Average sentiment of headlines injected per tick
+
+        {/* News vs post sentiment — contagion */}
+        <div style={{ padding: 16 }}>
+          <SectionHeader
+            label="Emotional contagion"
+            sub="news sentiment (purple) vs post sentiment (pink) per tick"
+          />
+          {contagionMerged.length === 0 ? (
+            <p className="muted">need both analyzed news and posts — check back soon.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={contagionMerged} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
+                <XAxis dataKey="tick_number" tick={{ fontSize: 10, fontFamily: "var(--mono)" }} />
+                <YAxis domain={[-1, 1]} tick={{ fontSize: 10, fontFamily: "var(--mono)" }} />
+                <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="4 4" />
+                <Line type="monotone" dataKey="news_sentiment" stroke="#c77dff" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="post_sentiment" stroke="#ff3ea5" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
-        {sentiment.length === 0 ? (
-          <p className="muted">No analyzed headlines yet — analysis runs every 30s in the background.</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={sentiment} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <XAxis dataKey="tick_number" tick={{ fontSize: 11 }} />
-              <YAxis domain={[-1, 1]} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v) => v.toFixed(3)} labelFormatter={(t) => `tick ${t}`} />
-              <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="avg_sentiment" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
       </div>
 
-      {/* ── Section 2: Personality correlation ── */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-h)" }}>
-            Personality × news sentiment
-          </div>
-          <div style={{ display: "flex", gap: 4 }}>
-            {Object.entries(TRAIT_COLORS).map(([trait, color]) => (
-              <button
-                key={trait}
-                onClick={() => setTraitX(trait)}
-                style={{
-                  padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700,
-                  border: `1px solid ${traitX === trait ? color : "var(--border)"}`,
-                  background: traitX === trait ? color + "22" : "transparent",
-                  color: traitX === trait ? color : "var(--text)",
-                  cursor: "pointer",
-                }}
-              >
-                {trait.slice(0, 3).toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-          Does a higher {traitX} score correlate with engaging more negative or positive news?
-        </div>
-        {correlation.length < 2 ? (
-          <p className="muted">Need more data — keep the simulation running.</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <ScatterChart margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="4 4" />
-              <XAxis
-                type="number" dataKey={traitX} domain={[0, 100]}
-                tick={{ fontSize: 11 }} name={traitX}
-                label={{ value: traitX, position: "insideBottomRight", offset: -5, fontSize: 11 }}
-              />
-              <YAxis
-                type="number" dataKey="avg_sentiment" domain={[-1, 1]}
-                tick={{ fontSize: 11 }} name="avg sentiment"
-              />
-              <ZAxis range={[40, 40]} />
-              <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="4 4" />
-              <Tooltip
-                cursor={{ strokeDasharray: "3 3" }}
-                content={({ payload }) => {
-                  if (!payload?.length) return null;
-                  const d = payload[0].payload;
-                  return (
-                    <div className="card" style={{ padding: "8px 12px", fontSize: 12 }}>
-                      <div style={{ fontWeight: 600 }}>@{d.agent_handle}</div>
-                      <div>{traitX}: {Math.round(d[traitX])}</div>
-                      <div>avg sentiment: {d.avg_sentiment.toFixed(3)}</div>
-                      <div className="muted">{d.engagement_count} headlines</div>
-                    </div>
-                  );
-                }}
-              />
-              <Scatter
-                data={correlation}
-                fill={TRAIT_COLORS[traitX]}
-                fillOpacity={0.8}
-              />
-            </ScatterChart>
-          </ResponsiveContainer>
-        )}
+      {/* ── Row 2: personality × post sentiment ── */}
+      <div style={{ padding: 16, borderBottom: "1px solid var(--border)" }}>
+        <SectionHeader
+          label="personality × post sentiment"
+          sub="each agent's full OCEAN profile alongside their avg post sentiment · sorted negative → positive"
+        />
+        <AgentProfileGrid data={correlation} />
       </div>
 
-      {/* ── Section 3: Headline feed ── */}
-      <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 1fr" : "1fr", gap: 16 }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-h)", marginBottom: 12 }}>
-            Headlines · {items.length} tracked · {analyzed.length} analyzed
+      {/* ── Row 3: headlines ── */}
+      <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 1fr" : "1fr" }}>
+        <div style={{ borderRight: selected ? "1px solid var(--border)" : "none" }}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-h)" }}>
+              Headlines
+            </span>
+            <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
+              {items.length} tracked · {analyzed.length} analyzed
+            </span>
           </div>
           {items.length === 0 ? (
-            <p className="muted">No headlines yet — start the simulation to begin injecting news.</p>
+            <p className="muted" style={{ padding: 16 }}>no headlines yet — start the simulation.</p>
           ) : (
             items.map((item) => (
               <HeadlineRow
@@ -244,11 +329,13 @@ export default function News() {
 
         {selected && (
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-h)", marginBottom: 8 }}>
-              Posts reacting to this headline
-            </div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 12, lineHeight: 1.4 }}>
-              &ldquo;{selected.title}&rdquo;
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-h)" }}>
+                Reactions
+              </div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
+                {selected.title}
+              </div>
             </div>
             <HeadlinePosts item={selected} />
           </div>
