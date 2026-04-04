@@ -7,9 +7,11 @@ import Thread from "./pages/Thread";
 import Population from "./pages/Population";
 import Graph from "./pages/Graph";
 import News from "./pages/News";
+import Runs from "./pages/Runs";
 import About from "./pages/About";
 import Prompts from "./pages/Prompts";
 import { api } from "./api";
+import { RunProvider, useRun } from "./RunContext";
 import "./App.css";
 
 function useDarkMode() {
@@ -26,30 +28,24 @@ function useDarkMode() {
 }
 
 function SimStatus() {
-  const [status, setStatus] = useState(null);
-  useEffect(() => {
-    const load = () => api.simStatus().then(setStatus).catch(() => {});
-    load();
-    const id = setInterval(load, 10000);
-    return () => clearInterval(id);
-  }, []);
-  if (!status) return null;
-  const running = status.is_running;
+  const { currentTick, isRunning } = useRun();
+  if (currentTick === null) return null;
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text)" }}>
-      <span>tick {status.current_tick ?? "—"}</span>
+      <span>tick {currentTick ?? "—"}</span>
       <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
         <span style={{
           width: 6, height: 6,
-          background: running ? "#2dd4bf" : "var(--text)",
+          background: isRunning ? "#2dd4bf" : "var(--text)",
           display: "inline-block",
-          animation: running ? "pulse 2s ease-in-out infinite" : "none",
+          animation: isRunning ? "pulse 2s ease-in-out infinite" : "none",
         }} />
-        {running ? "running" : "stopped"}
+        {isRunning ? "running" : "stopped"}
       </span>
     </span>
   );
 }
+
 
 function Header({ dark, setDark }) {
   const loc = useLocation();
@@ -82,6 +78,7 @@ function Header({ dark, setDark }) {
           <NavLink to="/lab" end className="subnav-link">Drift</NavLink>
           <NavLink to="/lab/network" className="subnav-link">Network</NavLink>
           <NavLink to="/lab/news" className="subnav-link">News</NavLink>
+          <NavLink to="/lab/runs" className="subnav-link">Runs</NavLink>
 
           {inLab && (
             <>
@@ -109,6 +106,7 @@ function Header({ dark, setDark }) {
     </header>
   );
 }
+
 
 function GhostModal({ onClose }) {
   const [content, setContent] = useState("");
@@ -220,6 +218,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <RunProvider>
       <div className="app">
         <Header dark={dark} setDark={setDark} />
         <main className="main">
@@ -234,6 +233,7 @@ export default function App() {
             <Route path="/lab"                   element={<Population />} />
             <Route path="/lab/network"           element={<Graph />} />
             <Route path="/lab/news"              element={<News />} />
+            <Route path="/lab/runs"              element={<Runs />} />
             {/* Legacy redirects */}
             <Route path="/agents"                element={<Navigate to="/social/agents" replace />} />
             <Route path="/population"            element={<Navigate to="/lab" replace />} />
@@ -244,6 +244,7 @@ export default function App() {
         <Footer />
         {ghost && <GhostModal onClose={() => setGhost(false)} />}
       </div>
+      </RunProvider>
     </BrowserRouter>
   );
 }

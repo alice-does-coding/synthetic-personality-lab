@@ -104,55 +104,60 @@ def rand_score():
     return round(random.uniform(5, 95), 1)
 
 
+def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AGENT):
+    """Seed agents for a specific run. Call from within an app context."""
+    existing_handles = {a.handle for a in Agent.query.all()}
+    existing_names   = {a.name for a in Agent.query.all()}
+    agents_created   = []
+
+    for i in range(num_agents):
+        o, c, e, a, n = rand_score(), rand_score(), rand_score(), rand_score(), rand_score()
+
+        print(f"  [{i+1}/{num_agents}] Generating identity (O:{o} C:{c} E:{e} A:{a} N:{n})...")
+        name, handle, bio = generate_identity(o, c, e, a, n, existing_handles, existing_names)
+        existing_handles.add(handle)
+        existing_names.add(name)
+
+        agent = Agent(
+            run_id=run_id,
+            name=name,
+            handle=handle,
+            bio=bio,
+            openness=o,
+            conscientiousness=c,
+            extraversion=e,
+            agreeableness=a,
+            neuroticism=n,
+        )
+        db.session.add(agent)
+        agents_created.append(agent)
+
+    db.session.flush()
+
+    all_ids = [a.id for a in agents_created]
+    follow_pairs = set()
+    for agent in agents_created:
+        targets = random.sample(
+            [aid for aid in all_ids if aid != agent.id],
+            k=min(follows_per_agent, len(all_ids) - 1),
+        )
+        for target_id in targets:
+            pair = (agent.id, target_id)
+            if pair not in follow_pairs:
+                follow_pairs.add(pair)
+                db.session.add(Follow(follower_id=agent.id, followee_id=target_id))
+
+    db.session.commit()
+    print(f"\nCreated {len(agents_created)} agents for run {run_id}.")
+    return agents_created
+
+
 def seed():
     app = create_app()
     with app.app_context():
-        existing_handles = {a.handle for a in Agent.query.all()}
-        existing_names   = {a.name for a in Agent.query.all()}
-        agents_created   = []
-
-        for i in range(NUM_AGENTS):
-            o, c, e, a, n = rand_score(), rand_score(), rand_score(), rand_score(), rand_score()
-
-            print(f"  [{i+1}/{NUM_AGENTS}] Generating identity (O:{o} C:{c} E:{e} A:{a} N:{n})...")
-            name, handle, bio = generate_identity(o, c, e, a, n, existing_handles, existing_names)
-            existing_handles.add(handle)
-            existing_names.add(name)
-
-            agent = Agent(
-                name=name,
-                handle=handle,
-                bio=bio,
-                openness=o,
-                conscientiousness=c,
-                extraversion=e,
-                agreeableness=a,
-                neuroticism=n,
-            )
-            db.session.add(agent)
-            agents_created.append(agent)
-
-        db.session.flush()
-
-        all_ids = [a.id for a in agents_created]
-        follow_pairs = set()
-        for agent in agents_created:
-            targets = random.sample(
-                [aid for aid in all_ids if aid != agent.id],
-                k=min(FOLLOWS_PER_AGENT, len(all_ids) - 1),
-            )
-            for target_id in targets:
-                pair = (agent.id, target_id)
-                if pair not in follow_pairs:
-                    follow_pairs.add(pair)
-                    db.session.add(Follow(follower_id=agent.id, followee_id=target_id))
-
-        db.session.commit()
-
-        print(f"\nCreated {len(agents_created)} agents and {len(follow_pairs)} follow relationships.")
-        for agent in agents_created:
-            print(f"  @{agent.handle} ({agent.name}) — O:{agent.openness} C:{agent.conscientiousness} E:{agent.extraversion} A:{agent.agreeableness} N:{agent.neuroticism}")
-            print(f"    bio: {agent.bio}")
+        from models import SimState
+        state = SimState.get()
+        seed_for_run(state.run_id)
 
 
 if __name__ == "__main__":

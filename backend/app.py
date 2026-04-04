@@ -31,12 +31,14 @@ def create_app(config_class=Config):
     from routes.sim import sim_bp
     from routes.news import news_bp
     from routes.nlp import nlp_bp
+    from routes.runs import runs_bp
 
     app.register_blueprint(agents_bp, url_prefix="/api/agents")
     app.register_blueprint(posts_bp, url_prefix="/api/posts")
     app.register_blueprint(sim_bp, url_prefix="/api/sim")
     app.register_blueprint(news_bp, url_prefix="/api/news")
     app.register_blueprint(nlp_bp, url_prefix="/api/nlp")
+    app.register_blueprint(runs_bp, url_prefix="/api/runs")
 
     def _tick_loop():
         from simulation import run_tick

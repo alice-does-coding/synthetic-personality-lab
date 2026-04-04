@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from models import Agent, NewsItem, Post
 
@@ -10,10 +10,17 @@ news_bp = Blueprint("news", __name__)
 @news_bp.route("/", methods=["GET"])
 def list_news():
     """All tracked headlines, most-engaged first."""
-    items = NewsItem.query.order_by(NewsItem.first_seen_at.desc()).all()
+    run_id = request.args.get("run_id", type=int)
+    news_q = NewsItem.query
+    if run_id:
+        news_q = news_q.filter_by(run_id=run_id)
+    items = news_q.order_by(NewsItem.first_seen_at.desc()).all()
 
     # Count posts referencing each URL
-    all_posts = Post.query.filter(Post.news_context.isnot(None)).all()
+    post_q = Post.query.filter(Post.news_context.isnot(None))
+    if run_id:
+        post_q = post_q.filter_by(run_id=run_id)
+    all_posts = post_q.all()
     engagement = {}
     for post in all_posts:
         for h in (post.news_context or []):
@@ -47,10 +54,17 @@ def news_posts(item_id):
 @news_bp.route("/sentiment-over-time", methods=["GET"])
 def sentiment_over_time():
     """Average sentiment of news injected per tick."""
-    posts = Post.query.filter(Post.news_context.isnot(None)).order_by(Post.tick_number).all()
+    run_id = request.args.get("run_id", type=int)
+    post_q = Post.query.filter(Post.news_context.isnot(None))
+    if run_id:
+        post_q = post_q.filter_by(run_id=run_id)
+    posts = post_q.order_by(Post.tick_number).all()
 
     # Build url→sentiment lookup
-    items = {i.url: i.sentiment for i in NewsItem.query.filter_by(analyzed=True).all()}
+    news_q = NewsItem.query.filter_by(analyzed=True)
+    if run_id:
+        news_q = news_q.filter_by(run_id=run_id)
+    items = {i.url: i.sentiment for i in news_q.all()}
 
     by_tick = {}
     for post in posts:
@@ -70,13 +84,11 @@ def sentiment_over_time():
 @news_bp.route("/post-sentiment-over-time", methods=["GET"])
 def post_sentiment_over_time():
     """Average sentiment + emotion of agent posts per tick."""
-    posts = (
-        Post.query
-        .filter_by(nlp_analyzed=True, is_public=True)
-        .filter(Post.parent_id.is_(None))
-        .order_by(Post.tick_number)
-        .all()
-    )
+    run_id = request.args.get("run_id", type=int)
+    q = Post.query.filter_by(nlp_analyzed=True, is_public=True).filter(Post.parent_id.is_(None))
+    if run_id:
+        q = q.filter_by(run_id=run_id)
+    posts = q.order_by(Post.tick_number).all()
     by_tick = defaultdict(lambda: {"sentiments": [], "emotions": []})
     for post in posts:
         by_tick[post.tick_number]["sentiments"].append(post.sentiment)
@@ -104,13 +116,15 @@ def post_sentiment_over_time():
 @news_bp.route("/post-personality-correlation", methods=["GET"])
 def post_personality_correlation():
     """For each agent: avg sentiment of their own posts + OCEAN scores."""
-    agents = {a.id: a for a in Agent.query.filter_by(is_active=True).all()}
-    posts = (
-        Post.query
-        .filter_by(nlp_analyzed=True, is_public=True)
-        .filter(Post.parent_id.is_(None))
-        .all()
-    )
+    run_id = request.args.get("run_id", type=int)
+    agent_q = Agent.query.filter_by(is_active=True)
+    if run_id:
+        agent_q = agent_q.filter_by(run_id=run_id)
+    agents = {a.id: a for a in agent_q.all()}
+    post_q = Post.query.filter_by(nlp_analyzed=True, is_public=True).filter(Post.parent_id.is_(None))
+    if run_id:
+        post_q = post_q.filter_by(run_id=run_id)
+    posts = post_q.all()
 
     by_agent = defaultdict(list)
     for post in posts:
@@ -140,9 +154,16 @@ def post_personality_correlation():
 @news_bp.route("/contagion", methods=["GET"])
 def sentiment_contagion():
     """Per tick: avg news sentiment vs avg post sentiment — tests emotional contagion."""
+    run_id = request.args.get("run_id", type=int)
     news_by_tick = {}
-    news_items = {i.url: i.sentiment for i in NewsItem.query.filter_by(analyzed=True).all()}
-    news_posts = Post.query.filter(Post.news_context.isnot(None)).order_by(Post.tick_number).all()
+    news_item_q = NewsItem.query.filter_by(analyzed=True)
+    if run_id:
+        news_item_q = news_item_q.filter_by(run_id=run_id)
+    news_items = {i.url: i.sentiment for i in news_item_q.all()}
+    news_post_q = Post.query.filter(Post.news_context.isnot(None))
+    if run_id:
+        news_post_q = news_post_q.filter_by(run_id=run_id)
+    news_posts = news_post_q.order_by(Post.tick_number).all()
     for post in news_posts:
         sents = [
             news_items[h["url"]]
@@ -154,12 +175,10 @@ def sentiment_contagion():
             bucket.extend(sents)
 
     post_by_tick = defaultdict(list)
-    analyzed_posts = (
-        Post.query
-        .filter_by(nlp_analyzed=True, is_public=True)
-        .filter(Post.parent_id.is_(None))
-        .all()
-    )
+    analyzed_q = Post.query.filter_by(nlp_analyzed=True, is_public=True).filter(Post.parent_id.is_(None))
+    if run_id:
+        analyzed_q = analyzed_q.filter_by(run_id=run_id)
+    analyzed_posts = analyzed_q.all()
     for post in analyzed_posts:
         if post.sentiment is not None:
             post_by_tick[post.tick_number].append(post.sentiment)

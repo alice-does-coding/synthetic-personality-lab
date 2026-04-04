@@ -12,8 +12,11 @@ agents_bp = Blueprint("agents", __name__)
 
 @agents_bp.route("/", methods=["GET"])
 def list_agents():
-    agents = Agent.query.filter_by(is_active=True).all()
-    return jsonify([a.to_dict() for a in agents])
+    run_id = request.args.get("run_id", type=int)
+    q = Agent.query.filter_by(is_active=True)
+    if run_id:
+        q = q.filter_by(run_id=run_id)
+    return jsonify([a.to_dict() for a in q.all()])
 
 
 @agents_bp.route("/", methods=["POST"])
@@ -65,7 +68,11 @@ def get_personality_history(agent_id):
 def population_drift():
     """Average + SD of OCEAN scores across all agents per tick."""
     import math
-    snapshots = PersonalitySnapshot.query.order_by(PersonalitySnapshot.tick_number).all()
+    run_id = request.args.get("run_id", type=int)
+    q = PersonalitySnapshot.query
+    if run_id:
+        q = q.filter_by(run_id=run_id)
+    snapshots = q.order_by(PersonalitySnapshot.tick_number).all()
 
     by_tick = defaultdict(list)
     for s in snapshots:
@@ -94,13 +101,24 @@ def population_drift():
 def graph():
     """Nodes + directed edges for the social graph."""
     from models import Follow
-    agents = Agent.query.filter_by(is_active=True).all()
-    follows = Follow.query.all()
+    run_id = request.args.get("run_id", type=int)
+    q = Agent.query.filter_by(is_active=True)
+    if run_id:
+        q = q.filter_by(run_id=run_id)
+    agents = q.all()
+    agent_ids = {a.id for a in agents}
+    follows = Follow.query.filter(
+        Follow.follower_id.in_(agent_ids),
+        Follow.followee_id.in_(agent_ids),
+    ).all()
 
     # Post and follower counts
     from collections import Counter
     from models import Post
-    post_counts     = Counter(p.agent_id for p in Post.query.filter_by(is_public=True).all())
+    post_q = Post.query.filter_by(is_public=True)
+    if run_id:
+        post_q = post_q.filter_by(run_id=run_id)
+    post_counts     = Counter(p.agent_id for p in post_q.all())
     follower_counts = Counter(f.followee_id for f in follows)
 
     nodes = [
@@ -125,15 +143,17 @@ def graph():
 @agents_bp.route("/trajectories", methods=["GET"])
 def trajectories():
     """Full personality history for all agents — one call for population spaghetti charts."""
-    agents = Agent.query.filter_by(is_active=True).all()
+    run_id = request.args.get("run_id", type=int)
+    q = Agent.query.filter_by(is_active=True)
+    if run_id:
+        q = q.filter_by(run_id=run_id)
+    agents = q.all()
     result = []
     for agent in agents:
-        snaps = (
-            PersonalitySnapshot.query
-            .filter_by(agent_id=agent.id)
-            .order_by(PersonalitySnapshot.tick_number)
-            .all()
-        )
+        snap_q = PersonalitySnapshot.query.filter_by(agent_id=agent.id)
+        if run_id:
+            snap_q = snap_q.filter_by(run_id=run_id)
+        snaps = snap_q.order_by(PersonalitySnapshot.tick_number).all()
         result.append({
             "id":     agent.id,
             "name":   agent.name,

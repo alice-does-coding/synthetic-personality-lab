@@ -13,7 +13,7 @@ from mistralai.client.models import TextChunk
 from config import Config
 from database import db
 from ipip import ITEMS, score_responses
-from models import Agent, IpipResponse, NewsItem, PersonalitySnapshot, Post, SimState
+from models import Agent, IpipResponse, NewsItem, PersonalitySnapshot, Post, Run, SimState
 from news import get_headlines_for_agent
 
 logger = logging.getLogger(__name__)
@@ -93,10 +93,25 @@ def _run_tick_inner(app, force=False, force_ipip=False):
         if not state.is_running and not force:
             return
 
-        tick = state.current_tick + 1
-        logger.info("tick %d starting", tick)
+        run = db.session.get(Run, state.run_id)
+        run_id = state.run_id
 
-        all_agents = Agent.query.filter_by(is_active=True).all()
+        # Auto-stop when tick_limit reached
+        tick = state.current_tick + 1
+        if run and run.tick_limit and tick > run.tick_limit:
+            logger.info("run %d tick_limit %d reached — stopping", run_id, run.tick_limit)
+            state.is_running = False
+            if run and not run.ended_at:
+                from datetime import datetime
+                run.ended_at = datetime.utcnow()
+            db.session.commit()
+            return
+
+        logger.info("tick %d starting (run %d)", tick, run_id)
+
+        news_enabled = run.news_enabled if run else True
+
+        all_agents = Agent.query.filter_by(is_active=True, run_id=run_id).all()
         agents = random.sample(all_agents, min(Config.AGENTS_PER_TICK, len(all_agents)))
         do_ipip = force_ipip or (tick % Config.REASSESSMENT_INTERVAL == 0)
 
@@ -115,7 +130,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                 logger.info("ghost mode — all %d agents replying to post %d", len(agents), gp.id)
 
         # Snapshot data needed by worker threads before we leave the main session
-        agent_snapshots = [_agent_snapshot(a, ghost_post=ghost_post) for a in agents]
+        agent_snapshots = [_agent_snapshot(a, ghost_post=ghost_post, news_enabled=news_enabled) for a in agents]
 
         # Each worker opens its own app_context + db session
         def post_worker(snap):
@@ -141,6 +156,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                     continue
                 for content, parent_id, news_context, engagement_type, prompt, is_public in results:
                     db.session.add(Post(
+                        run_id=run_id,
                         agent_id=agent_id,
                         content=content,
                         tick_number=tick,
@@ -155,6 +171,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                         for h in news_context:
                             if h.get("url") and not NewsItem.query.filter_by(url=h["url"]).first():
                                 db.session.add(NewsItem(
+                                    run_id=run_id,
                                     url=h["url"], title=h["title"],
                                     summary=h.get("summary"),
                                     source=h.get("source"), category=h.get("category"),
@@ -180,10 +197,12 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                 scores, big_five, new_bio = result
                 for idx, score in enumerate(scores):
                     db.session.add(IpipResponse(
+                        run_id=run_id,
                         agent_id=agent_id, tick_number=tick,
                         item_number=idx + 1, score=score,
                     ))
                 db.session.add(PersonalitySnapshot(
+                    run_id=run_id,
                     agent_id=agent_id, tick_number=tick,
                     openness=big_five["O"], conscientiousness=big_five["C"],
                     extraversion=big_five["E"], agreeableness=big_five["A"],
@@ -231,7 +250,7 @@ def _ipip_snapshot(agent):
     }
 
 
-def _agent_snapshot(agent, ghost_post=None):
+def _agent_snapshot(agent, ghost_post=None, news_enabled=True):
     """Serialize agent state to a plain dict so worker threads don't touch the ORM."""
     followee_ids = [f.followee_id for f in agent.following]
     feed = (
@@ -268,7 +287,7 @@ def _agent_snapshot(agent, ghost_post=None):
         "feed":     [{"handle": p.agent.handle, "content": p.content} for p in feed],
         "reply_to": reply_to,
         # Replies never get headlines. Top-level posts get one 60% of the time — the rest post organically.
-        "headlines": [] if (reply_to or random.random() < 0.4) else get_headlines_for_agent(
+        "headlines": [] if (not news_enabled or reply_to or random.random() < 0.4) else get_headlines_for_agent(
             {"openness": agent.openness, "conscientiousness": agent.conscientiousness,
              "extraversion": agent.extraversion, "agreeableness": agent.agreeableness,
              "neuroticism": agent.neuroticism},

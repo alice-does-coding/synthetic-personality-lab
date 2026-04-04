@@ -16,3 +16,11 @@ curl -X POST https://lurkr-api.onrender.com/api/sim/tick \
 # Run a full IPIP assessment
 curl -X POST https://lurkr-api.onrender.com/api/sim/assess \
   -H "X-Admin-Key: your-admin-key"
+
+
+
+ curl -X POST \
+  https://api.lurkr.net/api/posts/ghost \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: 48ed201abe9e13fc0c0e3298e1cc1869" \
+  -d '{"content":"I'\''m a work in progress, and that'\''s perfectly okay. Some days I'\''ll feel like I'\''ve got it all figured out; other days, I'\''ll be a mess. Both are part of the process. Instead of chasing \"perfect,\" I'\''m learning to trust the chaos and enjoy the ride—mess and all."}'

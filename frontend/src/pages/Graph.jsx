@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import ForceGraph2D from "react-force-graph-2d";
 import { api } from "../api";
+import { useRun } from "../RunContext";
 
 const TRAITS = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"];
 const SHORT  = { openness: "OPE", conscientiousness: "CON", extraversion: "EXT", agreeableness: "AGR", neuroticism: "NEU" };
@@ -44,6 +45,7 @@ function nodeRadius(val, max) {
 }
 
 export default function Graph() {
+  const { activeRunId } = useRun();
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [trait,     setTrait]     = useState("extraversion");
   const [sizeBy,    setSizeBy]    = useState("follower_count");
@@ -58,11 +60,13 @@ export default function Graph() {
   const graphRef     = useRef(null);
 
   useEffect(() => {
-    api.graph()
+    setLoading(true);
+    setError(null);
+    api.graph(activeRunId)
       .then(setGraphData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeRunId]);
 
   useEffect(() => {
     if (!graphRef.current || graphData.nodes.length === 0) return;

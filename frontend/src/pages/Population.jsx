@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useRun } from "../RunContext";
 import {
   ComposedChart, LineChart, Line, Area,
   XAxis, YAxis, Legend, CartesianGrid, Brush,
@@ -319,6 +320,7 @@ function AgentRadar({ agent }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Population() {
+  const { activeRunId } = useRun();
   const [agents,       setAgents]       = useState([]);
   const [drift,        setDrift]        = useState([]);
   const [trajectories, setTrajectories] = useState([]);
@@ -326,11 +328,13 @@ export default function Population() {
   const [loading,      setLoading]      = useState(true);
 
   useEffect(() => {
-    Promise.all([api.listAgents(), api.populationDrift(), api.trajectories()])
+    setLoading(true);
+    setError(null);
+    Promise.all([api.listAgents(activeRunId), api.populationDrift(activeRunId), api.trajectories(activeRunId)])
       .then(([a, d, t]) => { setAgents(a); setDrift(d); setTrajectories(t); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeRunId]);
 
   if (loading) return <p className="muted">Loading…</p>;
   if (error)   return <p className="error">{error}</p>;

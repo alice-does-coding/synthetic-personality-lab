@@ -2,10 +2,54 @@ from datetime import datetime
 from database import db
 
 
+class Run(db.Model):
+    __tablename__ = "runs"
+
+    id                = db.Column(db.Integer, primary_key=True)
+    name              = db.Column(db.String(100), nullable=False)
+    description       = db.Column(db.Text)
+    model             = db.Column(db.String(100), nullable=False, default="mistral-large-latest")
+    model_version     = db.Column(db.String(100))
+    news_enabled      = db.Column(db.Boolean, nullable=False, default=True)
+    news_categories   = db.Column(db.JSON)  # list of category strings
+    post_framing      = db.Column(db.Text)
+    ipip_framing      = db.Column(db.Text)
+    seed_distribution = db.Column(db.String(50), default="random")
+    agent_count       = db.Column(db.Integer)
+    tick_limit        = db.Column(db.Integer)
+    tick_duration_s   = db.Column(db.Integer)
+    started_at        = db.Column(db.DateTime)
+    ended_at          = db.Column(db.DateTime)
+    notes             = db.Column(db.Text)
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id":                self.id,
+            "name":              self.name,
+            "description":       self.description,
+            "model":             self.model,
+            "model_version":     self.model_version,
+            "news_enabled":      self.news_enabled,
+            "news_categories":   self.news_categories,
+            "post_framing":      self.post_framing,
+            "ipip_framing":      self.ipip_framing,
+            "seed_distribution": self.seed_distribution,
+            "agent_count":       self.agent_count,
+            "tick_limit":        self.tick_limit,
+            "tick_duration_s":   self.tick_duration_s,
+            "started_at":        self.started_at.isoformat() if self.started_at else None,
+            "ended_at":          self.ended_at.isoformat() if self.ended_at else None,
+            "notes":             self.notes,
+            "created_at":        self.created_at.isoformat(),
+        }
+
+
 class Agent(db.Model):
     __tablename__ = "agents"
 
     id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     handle = db.Column(db.String(50), unique=True, nullable=False)
     bio = db.Column(db.Text, default="")
@@ -59,6 +103,7 @@ class Post(db.Model):
     __tablename__ = "posts"
 
     id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False)
     agent_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
     tick_number = db.Column(db.Integer, nullable=False)
@@ -116,6 +161,7 @@ class NewsItem(db.Model):
     __tablename__ = "news_items"
 
     id         = db.Column(db.Integer, primary_key=True)
+    run_id     = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False)
     url        = db.Column(db.String(500), unique=True, nullable=False)
     title      = db.Column(db.Text, nullable=False)
     summary    = db.Column(db.Text, nullable=True)
@@ -159,6 +205,7 @@ class PersonalitySnapshot(db.Model):
     __tablename__ = "personality_snapshots"
 
     id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False)
     agent_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=False)
     tick_number = db.Column(db.Integer, nullable=False)
     openness = db.Column(db.Float, nullable=False)
@@ -187,6 +234,7 @@ class IpipResponse(db.Model):
     __tablename__ = "ipip_responses"
 
     id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False)
     agent_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=False)
     tick_number = db.Column(db.Integer, nullable=False)
     item_number = db.Column(db.Integer, nullable=False)  # 1–120
@@ -199,6 +247,7 @@ class SimState(db.Model):
     __tablename__ = "sim_state"
 
     id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False, default=1)
     current_tick = db.Column(db.Integer, default=0, nullable=False)
     is_running = db.Column(db.Boolean, default=False, nullable=False)
     ghost_post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)

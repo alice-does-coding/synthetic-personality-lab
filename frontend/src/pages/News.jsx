@@ -4,6 +4,7 @@ import {
   ReferenceLine, CartesianGrid, Cell,
 } from "recharts";
 import { api } from "../api";
+import { useRun } from "../RunContext";
 import PostCard from "../components/PostCard";
 
 const TRAITS = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"];
@@ -209,6 +210,7 @@ function AgentProfileGrid({ data }) {
 }
 
 export default function News() {
+  const { activeRunId } = useRun();
   const [items,        setItems]        = useState([]);
   const [newsOverTime, setNewsOverTime] = useState([]);
   const [postOverTime, setPostOverTime] = useState([]);
@@ -219,12 +221,14 @@ export default function News() {
   const [error,        setError]        = useState(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     Promise.all([
-      api.listNews(),
-      api.newsSentimentOverTime(),
-      api.postSentimentOverTime(),
-      api.sentimentContagion(),
-      api.postPersonalityCorrelation(),
+      api.listNews(activeRunId),
+      api.newsSentimentOverTime(activeRunId),
+      api.postSentimentOverTime(activeRunId),
+      api.sentimentContagion(activeRunId),
+      api.postPersonalityCorrelation(activeRunId),
     ])
       .then(([n, ns, ps, c, corr]) => {
         setItems(n);
@@ -235,7 +239,7 @@ export default function News() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeRunId]);
 
   if (loading) return <p className="muted" style={{ padding: 20 }}>loading…</p>;
   if (error)   return <p className="error"  style={{ padding: 20 }}>{error}</p>;

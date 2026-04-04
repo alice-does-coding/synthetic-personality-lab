@@ -14,6 +14,7 @@ def status():
     return jsonify({
         "current_tick": state.current_tick,
         "is_running": state.is_running,
+        "active_run_id": state.run_id,
         "agents_per_tick": Config.AGENTS_PER_TICK,
         "rate_limit": Config.MISTRAL_RATE_LIMIT,
     })
