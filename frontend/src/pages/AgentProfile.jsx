@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import { api } from "../api";
 import PostCard from "../components/PostCard";
+import MarkdownText from "../components/MarkdownText";
 
 const TRAIT_COLORS = {
   openness:          "#8b5cf6",
@@ -131,7 +132,7 @@ export default function AgentProfile() {
         ) : (
           monologue.map((t) => (
             <div key={t.id} className="card" style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 13, lineHeight: 1.6 }}>{t.content}</div>
+              <MarkdownText style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-h)" }}>{t.content}</MarkdownText>
               <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
                 tick {t.tick_number} · {t.engagement_type ?? "organic"}
               </div>
@@ -194,7 +195,7 @@ export default function AgentProfile() {
                 color,
               }));
               return (
-                <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
                   {/* Left: radar + bars */}
                   <div className="card" style={{ flexShrink: 0, width: 260 }}>
                     <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>tick {prevTick + 1}–{selectedTick}</div>

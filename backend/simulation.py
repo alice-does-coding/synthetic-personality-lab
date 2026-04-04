@@ -100,8 +100,22 @@ def _run_tick_inner(app, force=False, force_ipip=False):
         agents = random.sample(all_agents, min(Config.AGENTS_PER_TICK, len(all_agents)))
         do_ipip = force_ipip or (tick % Config.REASSESSMENT_INTERVAL == 0)
 
+        # Ghost mode — all agents reply to the pinned post this tick, post stays in network
+        ghost_post = None
+        if state.ghost_post_id:
+            gp = Post.query.get(state.ghost_post_id)
+            if gp:
+                ghost_post = {
+                    "id":      gp.id,
+                    "handle":  gp.agent.handle if gp.agent else "ghost",
+                    "content": gp.content,
+                }
+                agents = all_agents  # override sample — every agent responds
+                state.ghost_post_id = None  # fire once, then let it influence organically
+                logger.info("ghost mode — all %d agents replying to post %d", len(agents), gp.id)
+
         # Snapshot data needed by worker threads before we leave the main session
-        agent_snapshots = [_agent_snapshot(a) for a in agents]
+        agent_snapshots = [_agent_snapshot(a, ghost_post=ghost_post) for a in agents]
 
         # Each worker opens its own app_context + db session
         def post_worker(snap):
@@ -217,7 +231,7 @@ def _ipip_snapshot(agent):
     }
 
 
-def _agent_snapshot(agent):
+def _agent_snapshot(agent, ghost_post=None):
     """Serialize agent state to a plain dict so worker threads don't touch the ORM."""
     followee_ids = [f.followee_id for f in agent.following]
     feed = (
@@ -233,9 +247,11 @@ def _agent_snapshot(agent):
         .limit(Config.FEED_SAMPLE_SIZE)
         .all()
     )
-    # 40% chance to reply to a random post from the feed (if any exist)
+    # Ghost mode overrides normal reply selection — every agent must respond
     reply_to = None
-    if feed and random.random() < 0.70:
+    if ghost_post:
+        reply_to = ghost_post
+    elif feed and random.random() < 0.70:
         target = random.choice(feed)
         reply_to = {"id": target.id, "handle": target.agent.handle, "content": target.content}
 

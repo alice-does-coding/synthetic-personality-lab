@@ -15,6 +15,7 @@ def _add_columns_if_missing(engine):
         ("posts",      "emotion",         "VARCHAR(50)"),
         ("posts",      "nlp_analyzed",    "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("news_items", "summary",         "TEXT"),
+        ("sim_state",  "ghost_post_id",   "INTEGER REFERENCES posts(id)"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in new_columns:

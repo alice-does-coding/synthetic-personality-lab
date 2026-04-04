@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request
 
-from models import Agent, Post
+from auth import require_admin
+from database import db
+from models import Agent, Post, SimState
 
 posts_bp = Blueprint("posts", __name__)
 
@@ -66,6 +68,37 @@ def get_feed(agent_id):
         .all()
     )
     return jsonify([p.to_dict() for p in posts])
+
+
+@posts_bp.route("/ghost", methods=["POST"])
+@require_admin
+def create_ghost_post():
+    data    = request.get_json()
+    content = (data or {}).get("content", "").strip()
+    if not content:
+        return jsonify({"error": "content required"}), 400
+
+    # Find or create the reserved ghost agent (inactive — never posts on its own)
+    ghost = Agent.query.filter_by(handle="ghost").first()
+    if not ghost:
+        ghost = Agent(name="·", handle="ghost", bio="", is_active=False)
+        db.session.add(ghost)
+        db.session.flush()
+
+    state = SimState.get()
+    post  = Post(
+        agent_id=ghost.id,
+        content=content,
+        tick_number=state.current_tick,
+        engagement_type="ghost",
+        is_public=True,
+    )
+    db.session.add(post)
+    db.session.flush()
+
+    state.ghost_post_id = post.id
+    db.session.commit()
+    return jsonify(post.to_dict()), 201
 
 
 @posts_bp.route("/monologue/<int:agent_id>", methods=["GET"])

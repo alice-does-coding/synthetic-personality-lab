@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import MarkdownText from "./MarkdownText";
 
 const PALETTE = [
   "#ff3ea5", // hot pink
@@ -85,9 +86,9 @@ export default function PostCard({ post, depth = 0 }) {
       <div
         className="card"
         style={{
-          marginLeft: depth * 20,
+          marginLeft: depth * 16,
           borderLeft: depth > 0 ? `2px solid ${color}` : "1px solid var(--border)",
-          padding: "12px 16px",
+          padding: "10px 12px",
         }}
       >
         {headline && <Headline h={headline} mode={mode} />}
@@ -122,14 +123,14 @@ export default function PostCard({ post, depth = 0 }) {
         )}
 
         {/* content */}
-        <p style={{
-          margin: "0 0 0 36px",
+        <MarkdownText style={{
+          marginLeft: 36,
           lineHeight: 1.65,
           fontSize: 14,
           color: "var(--text-h)",
         }}>
           {post.content}
-        </p>
+        </MarkdownText>
 
         {/* footer */}
         <div style={{ marginTop: 10, paddingLeft: 36 }}>

@@ -203,8 +203,9 @@ export default function Graph() {
 
       {/* Controls */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
-        padding: "8px 20px", flexShrink: 0,
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "8px 12px", flexShrink: 0,
+        overflowX: "auto", scrollbarWidth: "none",
         borderBottom: "1px solid var(--border)",
         background: "var(--bg)",
       }}>

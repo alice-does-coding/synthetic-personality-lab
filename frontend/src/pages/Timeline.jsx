@@ -30,12 +30,56 @@ const CTRL = {
   color: "var(--text)",
 };
 
+const PAGE_SIZE = 20;
+
+function TickTooltip() {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      style={{ position: "relative", display: "inline-flex", alignItems: "center", alignSelf: "center", marginLeft: 8 }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <span style={{
+        fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
+        color: "var(--text)", border: "1px solid var(--border)",
+        width: 16, height: 16, borderRadius: "50%", display: "inline-flex",
+        alignItems: "center", justifyContent: "center",
+        cursor: "default", userSelect: "none", flexShrink: 0,
+      }}>?</span>
+      {show && (
+        <span style={{
+          position: "absolute", bottom: "calc(100% + 6px)", left: "50%",
+          transform: "translateX(-50%)",
+          background: "var(--bg)", border: "1px solid var(--border)",
+          padding: "7px 10px", zIndex: 100,
+          fontFamily: "var(--mono)", fontSize: 11, lineHeight: 1.6,
+          color: "var(--text-h)", whiteSpace: "nowrap",
+          pointerEvents: "none",
+        }}>
+          A <span style={{ color: "var(--pink)", fontWeight: 700 }}>tick</span> is one simulation cycle — agents read news,
+          <br />generate thoughts, and post. Each tick is one heartbeat.
+        </span>
+      )}
+    </span>
+  );
+}
+
+const TICK_WINDOWS = [
+  { label: "all time",      ticks: null },
+  { label: "last 50 ticks", ticks: 50   },
+  { label: "last 10 ticks", ticks: 10   },
+  { label: "this tick",     ticks: 1    },
+];
+
 export default function Timeline() {
-  const [posts,   setPosts]   = useState([]);
-  const [error,   setError]   = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [sortBy,  setSortBy]  = useState("latest");
-  const [trait,   setTrait]   = useState(TRAITS[4]);
+  const [posts,      setPosts]      = useState([]);
+  const [error,      setError]      = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [sortBy,     setSortBy]     = useState("latest");
+  const [trait,      setTrait]      = useState(TRAITS[4]);
+  const [page,       setPage]       = useState(1);
+  const [tickWindow, setTickWindow] = useState(null);
 
   useEffect(() => {
     api.listPosts(200)
@@ -47,16 +91,21 @@ export default function Timeline() {
   if (loading) return <p className="muted" style={{ padding: 20 }}>loading…</p>;
   if (error)   return <p className="error"  style={{ padding: 20 }}>{error}</p>;
 
-  const sorted = sort(posts, sortBy, trait);
+  const maxTick = posts.reduce((m, p) => Math.max(m, p.tick_number ?? 0), 0);
+
+  const filtered = sortBy === "discussed" && tickWindow != null
+    ? posts.filter((p) => p.tick_number >= maxTick - tickWindow + 1)
+    : posts;
+
+  const sorted = sort(filtered, sortBy, trait);
 
   return (
     <div>
-      {/* controls */}
+      {/* Row 1: sort mode + trait buttons */}
       <div style={{
         display: "flex", alignItems: "center", gap: 0,
-        marginBottom: 16,
-        borderBottom: "1px solid var(--border)",
-        paddingBottom: 12,
+        paddingBottom: 8,
+        flexWrap: "wrap", rowGap: 4,
       }}>
         <span style={{ fontSize: 11, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em", marginRight: 12 }}>
           sort
@@ -68,11 +117,11 @@ export default function Timeline() {
         ].map(({ id, label }) => (
           <button
             key={id}
-            onClick={() => setSortBy(id)}
+            onClick={() => { setSortBy(id); setPage(1); if (id !== "discussed") setTickWindow(null); }}
             style={{
               ...CTRL,
-              color:      sortBy === id ? "#000" : "var(--text)",
-              background: sortBy === id ? "var(--pink)" : "var(--bg)",
+              color:       sortBy === id ? "#000" : "var(--text)",
+              background:  sortBy === id ? "var(--pink)" : "var(--bg)",
               borderColor: sortBy === id ? "var(--pink)" : "var(--border)",
               marginRight: 2,
             }}
@@ -88,7 +137,7 @@ export default function Timeline() {
           return (
             <button
               key={t.key}
-              onClick={() => { setSortBy("trait"); setTrait(t); }}
+              onClick={() => { setSortBy("trait"); setTrait(t); setPage(1); }}
               title={t.label}
               style={{
                 ...CTRL,
@@ -106,8 +155,57 @@ export default function Timeline() {
         })}
       </div>
 
+      {/* Row 2: tick window — only when Most discussed */}
+      {sortBy === "discussed" && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 0,
+          paddingBottom: 12, marginBottom: 16,
+          borderBottom: "1px solid var(--border)",
+        }}>
+          <span style={{ fontSize: 11, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em", marginRight: 8 }}>
+            within
+          </span>
+          {TICK_WINDOWS.map(({ label, ticks }) => {
+            const active = tickWindow === ticks;
+            return (
+              <button
+                key={label}
+                onClick={() => { setTickWindow(ticks); setPage(1); }}
+                style={{
+                  ...CTRL,
+                  color:       active ? "#000" : "var(--text)",
+                  background:  active ? "var(--fuchsia)" : "var(--bg)",
+                  borderColor: active ? "var(--fuchsia)" : "var(--border)",
+                  marginRight: 2,
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+          <TickTooltip />
+        </div>
+      )}
+
+      {sortBy !== "discussed" && (
+        <div style={{ borderBottom: "1px solid var(--border)", marginBottom: 16 }} />
+      )}
+
       {sorted.length === 0 && <p className="muted">no posts yet.</p>}
-      {sorted.map((p) => <PostCard key={p.id} post={p} />)}
+      {sorted.slice(0, page * PAGE_SIZE).map((p) => <PostCard key={p.id} post={p} />)}
+
+      {page * PAGE_SIZE < sorted.length && (
+        <button
+          onClick={() => setPage((n) => n + 1)}
+          style={{
+            ...CTRL,
+            display: "flex", margin: "16px auto 0",
+            color: "var(--text-h)", borderColor: "var(--border)",
+          }}
+        >
+          load more · {sorted.length - page * PAGE_SIZE} remaining
+        </button>
+      )}
     </div>
   );
 }

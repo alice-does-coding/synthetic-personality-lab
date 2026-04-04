@@ -83,39 +83,19 @@ function AgentCard({ agent }) {
 
 export default function Agents() {
   const [agents, setAgents]   = useState([]);
-  const [sort, setSort]       = useState("assessments");
+  const [sort, setSort]       = useState("name");
   const [error, setError]     = useState(null);
   const [loading, setLoading] = useState(true);
-  const [form, setForm]       = useState({ name: "", handle: "", bio: "" });
-  const [creating, setCreating] = useState(false);
-  const [showForm, setShowForm] = useState(false);
 
-  const load = () =>
+  useEffect(() => {
     api.listAgents()
       .then(setAgents)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-
-  useEffect(() => { load(); }, []);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setCreating(true);
-    try {
-      await api.createAgent(form);
-      setForm({ name: "", handle: "", bio: "" });
-      setShowForm(false);
-      await load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setCreating(false);
-    }
-  };
+  }, []);
 
   const sorted = [...agents].sort((a, b) => {
-    if (sort === "assessments") return b.snapshot_count - a.snapshot_count;
-    if (sort === "name")        return a.name.localeCompare(b.name);
+    if (sort === "name") return a.name.localeCompare(b.name);
     return a.id - b.id;
   });
 
@@ -123,60 +103,23 @@ export default function Agents() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
         <h1 className="page-title" style={{ margin: 0 }}>Agents</h1>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <span className="muted" style={{ fontSize: 12 }}>Sort:</span>
-          {[["assessments", "Most assessed"], ["name", "Name"], ["id", "Default"]].map(([val, label]) => (
+          {[["name", "Name"], ["id", "Default"]].map(([val, label]) => (
             <button key={val} className={`btn${sort === val ? " primary" : ""}`} onClick={() => setSort(val)}>
               {label}
             </button>
           ))}
-          <button className="btn primary" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "Cancel" : "+ New Agent"}
-          </button>
         </div>
       </div>
 
-      {showForm && (
-        <form onSubmit={submit} className="card" style={{ marginBottom: 20, display: "grid", gap: 10 }}>
-          <input
-            required placeholder="Name"
-            value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-            style={inputStyle}
-          />
-          <input
-            required placeholder="Handle (no spaces)"
-            value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value.toLowerCase().replace(/\s/g, "") })}
-            style={inputStyle}
-          />
-          <input
-            placeholder="Bio (optional)"
-            value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })}
-            style={inputStyle}
-          />
-          <button className="btn primary" disabled={creating} type="submit">
-            {creating ? "Creating…" : "Create Agent"}
-          </button>
-        </form>
-      )}
-
       {error && <p className="error">{error}</p>}
       {sorted.length === 0 && <p className="muted">No agents yet.</p>}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
         {sorted.map((a) => <AgentCard key={a.id} agent={a} />)}
       </div>
     </div>
   );
 }
-
-const inputStyle = {
-  padding: "7px 10px",
-  borderRadius: 6,
-  border: "1px solid var(--border)",
-  background: "var(--bg)",
-  color: "var(--text-h)",
-  fontSize: 14,
-  width: "100%",
-  boxSizing: "border-box",
-};

@@ -68,7 +68,7 @@ export default function About() {
       </div>
 
       {/* Two col */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 32 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10, marginBottom: 32 }}>
         <div className="card">
           <div className="page-title" style={{ marginBottom: 8, color: "var(--fuchsia, #e879f9)" }}>the loop</div>
           <p style={{ fontSize: 12, lineHeight: 1.8, color: "var(--text-h)", margin: 0 }}>

@@ -49,4 +49,5 @@ export const api = {
   feed:      (agentId, limit = 20) => req(`/posts/feed/${agentId}?limit=${limit}`),
   replies:   (postId)              => req(`/posts/${postId}/replies`),
   thread:    (postId)              => req(`/posts/${postId}/thread`),
+  ghostPost: (content)            => adminReq("/posts/ghost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }),
 };

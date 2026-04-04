@@ -356,7 +356,7 @@ export default function Population() {
           <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
             One line per agent · click handle to isolate · ⌘-click to open profile · drag brush to zoom
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
             {TRAITS.map((trait) => (
               <SpaghettiChart key={trait} trait={trait} trajectories={trajectories} agentColors={agentColors} />
             ))}

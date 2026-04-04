@@ -201,6 +201,7 @@ class SimState(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     current_tick = db.Column(db.Integer, default=0, nullable=False)
     is_running = db.Column(db.Boolean, default=False, nullable=False)
+    ghost_post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
     updated_at = db.Column(
         db.DateTime,
         default=datetime.utcnow,

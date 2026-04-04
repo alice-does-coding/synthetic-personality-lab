@@ -249,7 +249,7 @@ export default function News() {
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 
       {/* ── Row 1: two time-series side by side ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", borderBottom: "1px solid var(--border)" }}>
 
         {/* Post sentiment over time */}
         <div style={{ padding: 16, borderRight: "1px solid var(--border)" }}>

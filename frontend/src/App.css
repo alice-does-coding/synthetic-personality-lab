@@ -15,11 +15,11 @@
 .header-inner {
   max-width: 900px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 12px;
   height: 44px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
 }
 .logo {
   font-family: var(--mono);
@@ -38,7 +38,11 @@
   align-items: center;
   gap: 2px;
   flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.nav::-webkit-scrollbar { display: none; }
 
 .section-tab {
   padding: 3px 10px;
@@ -86,8 +90,13 @@
   max-width: 900px;
   width: 100%;
   margin: 0 auto;
-  padding: 20px;
+  padding: 16px;
   box-sizing: border-box;
+}
+
+@media (min-width: 600px) {
+  .main { padding: 20px; }
+  .header-inner { padding: 0 20px; gap: 16px; }
 }
 
 /* ── Shared ───────────────────────────────────────────────── */
