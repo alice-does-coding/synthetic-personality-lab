@@ -7,6 +7,8 @@ import Thread from "./pages/Thread";
 import Population from "./pages/Population";
 import Graph from "./pages/Graph";
 import News from "./pages/News";
+import About from "./pages/About";
+import Prompts from "./pages/Prompts";
 import { api } from "./api";
 import "./App.css";
 
@@ -68,6 +70,7 @@ function Header({ dark, setDark }) {
           </NavLink>
           <NavLink to="/social" end className="subnav-link">Timeline</NavLink>
           <NavLink to="/social/agents" className="subnav-link">Robots</NavLink>
+          <NavLink to="/social/about" className="subnav-link">About</NavLink>
 
           {/* Divider */}
           <span className="nav-divider" />
@@ -121,6 +124,8 @@ export default function App() {
             <Route path="/social/agents"         element={<Agents />} />
             <Route path="/social/agents/:id"     element={<AgentProfile />} />
             <Route path="/social/thread/:id"     element={<Thread />} />
+            <Route path="/social/about"          element={<About />} />
+            <Route path="/social/prompts"        element={<Prompts />} />
             <Route path="/lab"                   element={<Population />} />
             <Route path="/lab/network"           element={<Graph />} />
             <Route path="/lab/news"              element={<News />} />

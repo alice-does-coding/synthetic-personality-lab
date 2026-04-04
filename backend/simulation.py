@@ -282,7 +282,7 @@ def _mistral_client():
 
 def _build_system_prompt(snap):
     return (
-        f"You are {snap['name']} (@{snap['handle']}), a user on a social media platform called Lurkr.\n\n"
+        f"You are {snap['name']} (@{snap['handle']}), a user on a social media platform.\n\n"
         f"Bio: {snap['bio'] or 'No bio provided.'}"
     )
 
@@ -299,11 +299,11 @@ def _regenerate_bio(snap, client):
     recent = snap.get("recent_posts", [])
     if recent:
         posts_block = "\n".join(f'- "{p["content"]}"' for p in recent)
-        context = f"Here are your recent posts and thoughts on Lurkr:\n{posts_block}\n\n"
+        context = f"Here are your recent posts and thoughts:\n{posts_block}\n\n"
     else:
         context = ""
     prompt = (
-        f"You are {snap['name']} (@{snap['handle']}) on Lurkr.\n\n"
+        f"You are {snap['name']} (@{snap['handle']}).\n\n"
         f"{context}"
         "Rewrite your bio in 1–2 sentences."
     )
@@ -425,7 +425,7 @@ def _run_ipip_assessment(snap):
         if private:
             block += "Thoughts you kept to yourself:\n" + "\n".join(f'- "{p["content"]}"' for p in private) + "\n\n"
         context = (
-            f"Here is your recent inner and outer life on Lurkr:\n{block}"
+            f"Here is your recent inner and outer life:\n{block}"
             "Rate how accurately each statement below describes you.\n\n"
         )
     else:
