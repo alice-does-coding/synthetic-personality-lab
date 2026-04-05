@@ -148,3 +148,9 @@
 
 .muted { color: var(--text); font-size: 12px; }
 .error { color: var(--rose); font-size: 12px; }
+
+.post-card:hover { background: var(--track); }
+@media (prefers-color-scheme: dark) {
+  .post-card:hover { background: #0d0d0d; }
+}
+[data-theme="dark"] .post-card:hover { background: #0d0d0d; }

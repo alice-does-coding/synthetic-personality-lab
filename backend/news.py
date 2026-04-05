@@ -15,6 +15,7 @@ Each headline dict has:
 
 import logging
 import random
+import re
 import time
 from threading import Lock
 
@@ -46,30 +47,44 @@ _last_fetch: float = 0.0
 _lock = Lock()
 
 
-def _fetch_all() -> list[dict]:
-    headlines = []
-    for source, category, url in FEEDS:
+def _fetch_feed(source, category, feed_url, retries=3) -> list[dict]:
+    """Fetch a single RSS feed with retry on transient errors."""
+    for attempt in range(retries):
         try:
-            r = requests.get(url, headers=_HEADERS, timeout=8)
+            r = requests.get(feed_url, headers=_HEADERS, timeout=8)
             r.raise_for_status()
             feed = feedparser.parse(r.content)
+            items = []
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
                 summary = entry.get("summary", "").strip()
-                # feedparser sometimes puts HTML in summary — strip tags crudely
-                import re
                 summary = re.sub(r"<[^>]+>", "", summary).strip()
-                url = entry.get("link", "").strip()
+                link = entry.get("link", "").strip()
                 if title:
-                    headlines.append({
+                    items.append({
                         "title":    title,
                         "summary":  summary,
                         "category": category,
                         "source":   source,
-                        "url":      url,
+                        "url":      link,
                     })
-        except Exception:
-            logger.warning("Failed to fetch %s %s feed", source, category)
+            return items
+        except Exception as exc:
+            if attempt < retries - 1:
+                backoff = 2 ** attempt
+                logger.warning("Feed fetch error %s %s (attempt %d/%d) — retrying in %ds: %s",
+                               source, category, attempt + 1, retries, backoff, exc)
+                time.sleep(backoff)
+            else:
+                logger.warning("Failed to fetch %s %s feed after %d attempts: %s",
+                               source, category, retries, exc)
+    return []
+
+
+def _fetch_all() -> list[dict]:
+    headlines = []
+    for source, category, url in FEEDS:
+        headlines.extend(_fetch_feed(source, category, url))
     random.shuffle(headlines)
     return headlines
 

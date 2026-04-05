@@ -54,11 +54,14 @@ def _mistral_chat(client, messages, max_tokens, temperature):
                 temperature=temperature,
             )
         except Exception as exc:
-            is_rate_limit = "429" in repr(exc) or "rate" in str(exc).lower()
-            if is_rate_limit and attempt < max_retries - 1:
+            err_str = repr(exc)
+            is_rate_limit = "429" in err_str or "rate" in str(exc).lower()
+            is_server_err = any(c in err_str for c in ("500", "502", "503", "504", "unavailable"))
+            if (is_rate_limit or is_server_err) and attempt < max_retries - 1:
                 backoff = 2 ** attempt  # 1 s, 2 s, 4 s, 8 s, 16 s, 32 s
-                logger.warning("429 rate-limited (attempt %d/%d) — backing off %ds",
-                               attempt + 1, max_retries, backoff)
+                level = logger.warning if is_rate_limit else logger.warning
+                level("Mistral error (attempt %d/%d) — backing off %ds: %s",
+                      attempt + 1, max_retries, backoff, exc)
                 time.sleep(backoff)
             else:
                 raise
@@ -350,7 +353,7 @@ def _build_ipip_system_prompt(snap):
 
 def _generate_thoughts(snap, client, user_prompt, n):
     """Generate n distinct thoughts in one call, separated by ---."""
-    prompt = user_prompt + f"\n\nWrite {n} different thoughts, each 1–3 sentences. Separate them with ---"
+    prompt = user_prompt + f"\n\nWrite {n} different thoughts. Each must be 140 characters or fewer. Separate them with ---"
     resp = _mistral_chat(
         client,
         messages=[
@@ -361,8 +364,8 @@ def _generate_thoughts(snap, client, user_prompt, n):
         temperature=0.9,
     )
     raw = _extract_text(resp.choices[0].message.content).strip()
-    thoughts = [re.sub(r'^\d+[\.\)]\s*', '', t.strip()) for t in raw.split("---") if t.strip()]
-    return thoughts[:n] if thoughts else [raw]
+    thoughts = [re.sub(r'^\d+[\.\)]\s*', '', t.strip())[:140] for t in raw.split("---") if t.strip()]
+    return thoughts[:n] if thoughts else [raw[:140]]
 
 
 def _select_thought(snap, thoughts, client):
@@ -402,12 +405,12 @@ def _generate_post(snap):
             client,
             messages=[
                 {"role": "system", "content": _build_system_prompt(snap)},
-                {"role": "user",   "content": user_prompt},
+                {"role": "user",   "content": user_prompt + "\n\nReply in 140 characters or fewer."},
             ],
             max_tokens=Config.MAX_POST_TOKENS,
             temperature=0.9,
         )
-        content = _extract_text(resp.choices[0].message.content).strip()
+        content = _extract_text(resp.choices[0].message.content).strip()[:140]
         return [(content, r["id"], None, "reply", user_prompt, True)]
 
     # Top-level posts: generate N thoughts, agent selects one to publish
@@ -513,31 +516,34 @@ _HF_SENTIMENT_URL = "https://router.huggingface.co/hf-inference/models/cardiffnl
 _HF_EMOTION_URL   = "https://router.huggingface.co/hf-inference/models/j-hartmann/emotion-english-distilroberta-base"
 
 
-def _hf_infer_batch(url, texts, headers, retries=3):
+def _hf_infer_batch(url, texts, headers, retries=6):
     """POST a batch of texts to a HF Inference API endpoint.
-    Retries on HTTP 503, read timeouts, and 200+error-body (model still loading)."""
-    from requests.exceptions import ReadTimeout
+    Retries on any transient error (5xx, timeouts, model-loading error body)."""
+    from requests.exceptions import ConnectionError as ReqConnError, ReadTimeout, Timeout
     for attempt in range(retries):
-        wait = 20 * (attempt + 1)
+        backoff = min(20 * (attempt + 1), 60)
         try:
             resp = requests.post(url, json={"inputs": texts}, headers=headers, timeout=30)
-        except ReadTimeout:
-            logger.info("HF read timeout (attempt %d/%d) — retrying in %ds", attempt + 1, retries, wait)
-            time.sleep(wait)
+        except (ReadTimeout, Timeout, ReqConnError) as exc:
+            logger.warning("HF request error (attempt %d/%d) — retrying in %ds: %s",
+                           attempt + 1, retries, backoff, exc)
+            time.sleep(backoff)
             continue
-        if resp.status_code == 503:
-            logger.info("HF model loading (503) — retrying in %ds", wait)
-            time.sleep(wait)
+        if resp.status_code in (500, 502, 503, 504):
+            logger.warning("HF HTTP %d (attempt %d/%d) — retrying in %ds",
+                           resp.status_code, attempt + 1, retries, backoff)
+            time.sleep(backoff)
             continue
         resp.raise_for_status()
         result = resp.json()
         # HF sometimes returns 200 with {"error": "..."} while the model warms up
         if isinstance(result, dict) and "error" in result:
-            logger.info("HF model loading (error body) — retrying in %ds", wait)
-            time.sleep(wait)
+            logger.warning("HF error body (attempt %d/%d) — retrying in %ds: %s",
+                           attempt + 1, retries, backoff, result["error"])
+            time.sleep(backoff)
             continue
         return result
-    raise RuntimeError("HF model failed to load after retries")
+    raise RuntimeError(f"HF inference failed after {retries} attempts")
 
 
 def _analyze_news_batch(items, app):

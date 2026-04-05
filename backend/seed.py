@@ -9,6 +9,7 @@ Usage:
 import json
 import random
 import re
+import time
 from app import create_app
 from config import Config
 from database import db
@@ -79,12 +80,25 @@ def generate_identity(run, existing_handles, existing_names, persona_prompt=None
         '{"bio": "..."}'
     )
 
-    resp = client.chat.complete(
-        model=Config.MISTRAL_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=150,
-        temperature=1.0,
-    )
+    max_retries = 6
+    for attempt in range(max_retries):
+        try:
+            resp = client.chat.complete(
+                model=Config.MISTRAL_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=150,
+                temperature=1.0,
+            )
+            break
+        except Exception as exc:
+            err_str = repr(exc)
+            retryable = any(c in err_str for c in ("429", "500", "502", "503", "504", "unavailable", "rate"))
+            if retryable and attempt < max_retries - 1:
+                backoff = 2 ** attempt
+                print(f"  Mistral error (attempt {attempt+1}/{max_retries}), retrying in {backoff}s: {exc}")
+                time.sleep(backoff)
+            else:
+                raise
     raw = _extract_text(resp.choices[0].message.content).strip()
 
     # Strip markdown code fences if present

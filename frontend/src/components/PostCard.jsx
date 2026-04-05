@@ -20,15 +20,15 @@ function agentColor(str) {
   return PALETTE[Math.abs(hash) % PALETTE.length];
 }
 
-function Avatar({ handle }) {
+function Avatar({ handle, size = 38 }) {
   const letter = (handle || "?")[0].toUpperCase();
   const color  = agentColor(handle || "");
   return (
     <div style={{
-      width: 28, height: 28, flexShrink: 0,
+      width: size, height: size, flexShrink: 0,
       background: color,
       display: "flex", alignItems: "center", justifyContent: "center",
-      fontWeight: 700, fontSize: 12,
+      fontWeight: 700, fontSize: size * 0.42,
       color: "#000", userSelect: "none",
       fontFamily: "var(--mono)",
     }}>
@@ -43,7 +43,7 @@ function Headline({ h, mode }) {
     <div style={{
       display: "flex", alignItems: "baseline", gap: 10,
       padding: "5px 10px",
-      marginBottom: 10,
+      marginBottom: 12,
       borderLeft: "2px solid var(--fuchsia, #e879f9)",
       background: "rgba(232,121,249,0.05)",
     }}>
@@ -84,72 +84,97 @@ export default function PostCard({ post, depth = 0 }) {
   return (
     <div style={{ marginBottom: 1 }}>
       <div
-        className="card"
+        className="card post-card"
         style={{
-          marginLeft: depth * 16,
-          borderLeft: depth > 0 ? `2px solid ${color}` : "1px solid var(--border)",
-          padding: "10px 12px",
+          marginLeft: depth * 20,
+          borderLeft: `3px solid ${color}`,
+          padding: "12px 14px",
+          transition: "background 0.1s",
         }}
       >
         {headline && <Headline h={headline} mode={mode} />}
 
         {/* header row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
           <Link to={`/social/agents/${post.agent_id}`} style={{ textDecoration: "none", flexShrink: 0 }}>
             <Avatar handle={post.agent_handle} />
           </Link>
 
-          <Link
-            to={`/social/agents/${post.agent_id}`}
-            style={{ fontWeight: 700, fontSize: 13, color: "var(--text-h)", textDecoration: "none", flexShrink: 0 }}
-          >
-            {post.agent_name}
-          </Link>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+              <Link
+                to={`/social/agents/${post.agent_id}`}
+                style={{ fontWeight: 700, fontSize: 14, color: "var(--text-h)", textDecoration: "none" }}
+              >
+                {post.agent_name}
+              </Link>
+              <span style={{ fontSize: 12, color, fontWeight: 600 }}>@{post.agent_handle}</span>
+              <span style={{ fontSize: 11, color: "var(--text)", marginLeft: "auto", flexShrink: 0, whiteSpace: "nowrap" }}>
+                t{post.tick_number}
+                <span style={{ margin: "0 5px", opacity: 0.35 }}>·</span>
+                {time}
+              </span>
+            </div>
 
-          <span style={{ fontSize: 12, color, fontWeight: 600 }}>@{post.agent_handle}</span>
-
-          <span style={{ fontSize: 11, color: "var(--text)", marginLeft: "auto", flexShrink: 0 }}>
-            tick {post.tick_number}
-            <span style={{ margin: "0 6px", opacity: 0.4 }}>·</span>
-            {time}
-          </span>
+            {/* reply context */}
+            {post.parent_handle && depth === 0 && (
+              <div style={{ fontSize: 11, color: "var(--text)", marginTop: 2 }}>
+                ↩ <span style={{ color: "var(--pink)" }}>@{post.parent_handle}</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* reply context */}
-        {post.parent_handle && depth === 0 && (
-          <div style={{ fontSize: 11, color: "var(--text)", marginBottom: 6, paddingLeft: 36 }}>
-            ↩ <span style={{ color: "var(--pink)" }}>@{post.parent_handle}</span>
-          </div>
-        )}
-
-        {/* content */}
+        {/* content — full width, no indent */}
         <MarkdownText style={{
-          marginLeft: 36,
-          lineHeight: 1.65,
-          fontSize: 14,
+          lineHeight: 1.7,
+          fontSize: 15,
           color: "var(--text-h)",
+          marginBottom: 12,
         }}>
           {post.content}
         </MarkdownText>
 
         {/* footer */}
-        <div style={{ marginTop: 10, paddingLeft: 36 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <Link
             to={`/social/thread/${post.id}`}
             style={{
               fontSize: 11,
-              color: threadCount > 0 ? "var(--pink)" : "var(--text)",
-              opacity: threadCount > 0 ? 0.7 : 0.5,
+              color: threadCount > 0 ? color : "var(--text)",
+              opacity: threadCount > 0 ? 1 : 0.45,
               textDecoration: "none",
               display: "inline-flex", alignItems: "center", gap: 5,
-              textTransform: "uppercase", letterSpacing: "0.06em",
+              fontWeight: threadCount > 0 ? 700 : 400,
+              letterSpacing: "0.04em",
             }}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" strokeLinejoin="miter">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" strokeLinejoin="miter">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
-            {threadCount} {threadCount === 1 ? "comment" : "comments"}
+            {threadCount > 0 ? (
+              <>{threadCount} {threadCount === 1 ? "reply" : "replies"}</>
+            ) : (
+              <>no replies</>
+            )}
           </Link>
+
+          {threadCount > 0 && (
+            <Link
+              to={`/social/thread/${post.id}`}
+              style={{
+                fontSize: 10,
+                color,
+                textDecoration: "none",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                opacity: 0.75,
+              }}
+            >
+              view thread →
+            </Link>
+          )}
         </div>
       </div>
     </div>
