@@ -136,13 +136,19 @@ const Textarea = ({ label, value, onChange, placeholder, rows = 3 }) => (
   </div>
 );
 
+const MODELS = [
+  { value: "mistral-large-latest", label: "mistral-large" },
+  { value: "mistral-small-latest", label: "mistral-small" },
+  { value: "open-mistral-nemo",    label: "mistral-nemo"  },
+];
+
 function autoName(model, newsEnabled, persona) {
   const now = new Date();
   const mm  = String(now.getMonth() + 1).padStart(2, "0");
   const dd  = String(now.getDate()).padStart(2, "0");
   const hh  = String(now.getHours()).padStart(2, "0");
   const min = String(now.getMinutes()).padStart(2, "0");
-  const shortModel = model.replace(/-latest$/, "");
+  const shortModel = model.replace(/-latest$/, "").replace(/^(open-|mistral-)/, "").replace(/-/g, "");
   const news = newsEnabled ? "news" : "no-news";
   const p = persona ? `-${persona}` : "";
   return `${mm}${dd}-${hh}${min}-${shortModel}-${news}${p}`;
@@ -153,27 +159,32 @@ const DEFAULTS = {
   description: "",
   model: "mistral-large-latest",
   news_enabled: true,
-  batch_mode: false,
-  post_framing: "an entity on a social network",
-  ipip_framing: "your recent inner and outer life",
-  seed_distribution: "random",
-  agent_count: 10,
-  tick_limit: 50,
-  tick_duration_s: 30,
+  batch_mode: true,
+  agent_framing: "an entity on a social network",
+  persona: null,
+  agent_count: 50,
+  tick_limit: 100,
   notes: "",
 };
 
 function CreateRunForm({ onCreated, onCancel }) {
-  const [form, setForm] = useState(() => ({ ...DEFAULTS, name: autoName(DEFAULTS.model, DEFAULTS.news_enabled) }));
+  const [form, setForm] = useState(() => ({ ...DEFAULTS, name: autoName(DEFAULTS.model, DEFAULTS.news_enabled, null) }));
+  const [personas, setPersonas] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const nameEdited = useRef(false);
 
+  useEffect(() => {
+    api.listPersonas().then(setPersonas).catch(() => {});
+  }, []);
+
   const set = (key) => (val) => setForm(f => {
     const next = { ...f, [key]: val };
-    // Keep name in sync with model/news unless user has manually changed it
-    if ((key === "model" || key === "news_enabled") && !nameEdited.current) {
-      next.name = autoName(next.model, next.news_enabled);
+    if (!nameEdited.current) {
+      const m = key === "model"       ? val : next.model;
+      const n = key === "news_enabled" ? val : next.news_enabled;
+      const p = key === "persona"      ? val : next.persona;
+      next.name = autoName(m, n, p);
     }
     return next;
   });
@@ -184,9 +195,9 @@ function CreateRunForm({ onCreated, onCancel }) {
     try {
       const run = await api.createRun({
         ...form,
-        agent_count: parseInt(form.agent_count) || null,
-        tick_limit: parseInt(form.tick_limit) || null,
-        tick_duration_s: parseInt(form.tick_duration_s) || null,
+        post_framing: form.agent_framing,
+        agent_count:  parseInt(form.agent_count) || null,
+        tick_limit:   parseInt(form.tick_limit)  || null,
       });
       onCreated(run);
     } catch (e) {
@@ -202,6 +213,8 @@ function CreateRunForm({ onCreated, onCancel }) {
     </div>
   );
 
+  const selectedPersona = personas.find(p => p.key === form.persona) ?? null;
+
   return (
     <div style={{ border: "1px solid var(--text-h)", padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ ...mono, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-h)" }}>
@@ -210,8 +223,35 @@ function CreateRunForm({ onCreated, onCancel }) {
 
       {section("identity")}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Input label="name *" value={form.name} onChange={(v) => { nameEdited.current = true; set("name")(v); }} placeholder="no-news-control" />
-        <Input label="model" value={form.model} onChange={set("model")} placeholder="mistral-large-latest" />
+        <Input
+          label="name *"
+          value={form.name}
+          onChange={(v) => { nameEdited.current = true; set("name")(v); }}
+          placeholder="no-news-control"
+        />
+        {/* Model select */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ ...mono, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-dim)" }}>
+            model
+          </label>
+          <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+            {MODELS.map(m => (
+              <button
+                key={m.value}
+                onClick={() => set("model")(m.value)}
+                style={{
+                  ...mono, fontSize: 10, fontWeight: 700,
+                  padding: "4px 10px", cursor: "pointer",
+                  border: `1px solid ${form.model === m.value ? "var(--text-h)" : "var(--border)"}`,
+                  background: form.model === m.value ? "var(--text-h)" : "var(--bg)",
+                  color: form.model === m.value ? "var(--bg)" : "var(--text)",
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <Textarea label="description" value={form.description} onChange={set("description")} placeholder="What is this run testing?" rows={2} />
 
@@ -221,30 +261,63 @@ function CreateRunForm({ onCreated, onCancel }) {
         <Toggle label="batch mode" value={form.batch_mode} onChange={set("batch_mode")} />
       </div>
 
+      {section("population")}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          {/* None = population norms */}
+          <button
+            onClick={() => set("persona")(null)}
+            style={{
+              ...mono, fontSize: 10, fontWeight: 700,
+              padding: "4px 10px", cursor: "pointer",
+              border: `1px solid ${form.persona === null ? "var(--text-h)" : "var(--border)"}`,
+              background: form.persona === null ? "var(--text-h)" : "var(--bg)",
+              color: form.persona === null ? "var(--bg)" : "var(--text)",
+            }}
+          >
+            population norms
+          </button>
+          {personas.map(p => (
+            <button
+              key={p.key}
+              onClick={() => set("persona")(p.key)}
+              style={{
+                ...mono, fontSize: 10, fontWeight: 700,
+                padding: "4px 10px", cursor: "pointer",
+                border: `1px solid ${form.persona === p.key ? "var(--pink)" : "var(--border)"}`,
+                background: form.persona === p.key ? "var(--pink)" : "var(--bg)",
+                color: form.persona === p.key ? "#000" : "var(--text)",
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {selectedPersona && (
+          <span style={{ ...mono, fontSize: 10, color: "var(--text)", opacity: 0.7 }}>
+            {selectedPersona.description}
+          </span>
+        )}
+        {form.persona === null && (
+          <span style={{ ...mono, fontSize: 10, color: "var(--text)", opacity: 0.7 }}>
+            Agents sampled from IPIP-NEO population norms — realistic distribution, no archetype.
+          </span>
+        )}
+      </div>
+
       {section("framing")}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Input label="post system prompt framing" value={form.post_framing} onChange={set("post_framing")} placeholder="an entity on a social network" />
-        <Input label="ipip framing" value={form.ipip_framing} onChange={set("ipip_framing")} placeholder="your recent inner and outer life" />
-      </div>
+      <Input label="agent framing" value={form.agent_framing} onChange={set("agent_framing")} placeholder="an entity on a social network" />
 
-      {section("seed")}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-        <Input label="seed distribution" value={form.seed_distribution} onChange={set("seed_distribution")} placeholder="random" />
-        <Input label="agent count" value={form.agent_count} onChange={set("agent_count")} type="number" />
-      </div>
-
-      {section("schedule")}
+      {section("scale")}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Input label="tick limit" value={form.tick_limit} onChange={set("tick_limit")} type="number" placeholder="1000" />
-        <Input label="tick duration (seconds)" value={form.tick_duration_s} onChange={set("tick_duration_s")} type="number" placeholder="30" />
+        <Input label="agents" value={form.agent_count} onChange={set("agent_count")} type="number" />
+        <Input label="tick limit" value={form.tick_limit} onChange={set("tick_limit")} type="number" placeholder="100" />
       </div>
 
       {section("notes")}
       <Textarea label="notes" value={form.notes} onChange={set("notes")} placeholder="Hypothesis, context, what changed..." rows={3} />
 
-      {error && (
-        <span style={{ ...mono, fontSize: 10, color: "#ff3ea5" }}>{error}</span>
-      )}
+      {error && <span style={{ ...mono, fontSize: 10, color: "#ff3ea5" }}>{error}</span>}
 
       <div style={{ display: "flex", gap: 10 }}>
         <button

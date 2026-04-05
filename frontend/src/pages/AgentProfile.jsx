@@ -30,7 +30,7 @@ export default function AgentProfile() {
   useEffect(() => {
     Promise.all([
       api.getAgent(id),
-      api.listPosts(100, id),
+      api.listPosts({ limit: 100, agentId: id }),
       api.personalityHistory(id),
       api.monologue(id),
     ])

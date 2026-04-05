@@ -9,14 +9,27 @@ posts_bp = Blueprint("posts", __name__)
 
 @posts_bp.route("/", methods=["GET"])
 def list_posts():
-    limit    = request.args.get("limit", 50, type=int)
-    agent_id = request.args.get("agent_id", type=int)
-    run_id   = request.args.get("run_id", type=int)
+    limit           = request.args.get("limit", 50, type=int)
+    agent_id        = request.args.get("agent_id", type=int)
+    run_id          = request.args.get("run_id", type=int)
+    top_level       = request.args.get("top_level", "false").lower() == "true"
+    tick_min        = request.args.get("tick_min", type=int)
+    tick_max        = request.args.get("tick_max", type=int)
+    engagement_type = request.args.get("engagement_type")
+
     query = Post.query.filter_by(is_public=True).order_by(Post.created_at.desc())
     if agent_id:
         query = query.filter_by(agent_id=agent_id)
     if run_id:
         query = query.filter_by(run_id=run_id)
+    if top_level:
+        query = query.filter(Post.parent_id.is_(None))
+    if tick_min is not None:
+        query = query.filter(Post.tick_number >= tick_min)
+    if tick_max is not None:
+        query = query.filter(Post.tick_number <= tick_max)
+    if engagement_type:
+        query = query.filter_by(engagement_type=engagement_type)
     return jsonify([p.to_dict() for p in query.limit(limit).all()])
 
 

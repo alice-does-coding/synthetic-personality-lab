@@ -30,3 +30,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Data exports and analysis artifacts
+backend/*.json
+backend/*.png
+backend/*.html
+backend/instance/

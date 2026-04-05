@@ -1,3 +1,4 @@
+import logging
 import threading
 
 from flask import Flask
@@ -10,6 +11,12 @@ from database import db, init_db
 
 
 def create_app(config_class=Config):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
     app = Flask(__name__)
     app.config.from_object(config_class)
 

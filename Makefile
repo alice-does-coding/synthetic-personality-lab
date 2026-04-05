@@ -1,4 +1,4 @@
-.PHONY: setup run stop backend frontend reset test
+.PHONY: setup run stop backend frontend reset reborn test
 
 setup:
 	@echo "Setting up backend..."
@@ -35,3 +35,16 @@ stop:
 	@pkill -f "vite" 2>/dev/null || true
 	@lsof -ti :8080 | xargs kill -9 2>/dev/null || true
 	@echo "All services stopped."
+
+reborn:
+	@echo "Stopping services..."
+	@pkill -f "python3.11 app.py" 2>/dev/null || true
+	@pkill -f "vite" 2>/dev/null || true
+	@lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+	@echo "Resetting database..."
+	@rm -f backend/instance/lab.db
+	@echo "Starting backend..."
+	@cd backend && . venv/bin/activate && python3.11 app.py &
+	@sleep 2
+	@echo "Starting frontend..."
+	cd frontend && npm run dev; make stop

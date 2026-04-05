@@ -46,7 +46,17 @@ export const api = {
   sentimentContagion:         (runId) => req(`/news/contagion${runId ? `?run_id=${runId}` : ""}`),
 
   // posts
-  listPosts:  (limit = 50, agentId, runId) => req(`/posts/?limit=${limit}${agentId ? `&agent_id=${agentId}` : ""}${runId ? `&run_id=${runId}` : ""}`),
+  listPosts:  (params = {}) => {
+    const { limit = 50, agentId, runId, topLevel, tickMin, tickMax, engagementType } = params;
+    const q = new URLSearchParams({ limit });
+    if (agentId)        q.set("agent_id", agentId);
+    if (runId)          q.set("run_id", runId);
+    if (topLevel)       q.set("top_level", "true");
+    if (tickMin != null) q.set("tick_min", tickMin);
+    if (tickMax != null) q.set("tick_max", tickMax);
+    if (engagementType) q.set("engagement_type", engagementType);
+    return req(`/posts/?${q}`);
+  },
   monologue:  (agentId, limit = 100) => req(`/posts/monologue/${agentId}?limit=${limit}`),
   feed:      (agentId, limit = 20) => req(`/posts/feed/${agentId}?limit=${limit}`),
   replies:   (postId)              => req(`/posts/${postId}/replies`),

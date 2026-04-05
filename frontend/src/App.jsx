@@ -254,14 +254,15 @@ function AdminModal({ onClose }) {
 }
 
 function GhostModal({ onClose }) {
+  const { viewingRunId } = useRun();
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
 
   const submit = async () => {
-    if (!content.trim() || sending) return;
+    if (!content.trim() || sending || !viewingRunId) return;
     setSending(true);
     try {
-      await api.ghostPost(content.trim());
+      await api.ghostPost(viewingRunId, content.trim());
     } finally {
       onClose();
     }

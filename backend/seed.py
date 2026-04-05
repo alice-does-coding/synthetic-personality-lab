@@ -10,12 +10,13 @@ import json
 import random
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from app import create_app
 from config import Config
 from database import db
 from mistralai.client import Mistral
 from mistralai.client.models import TextChunk
-from models import Agent, Follow, IpipResponse, PersonalitySnapshot
+from models import Agent, Follow, PersonalitySnapshot
 
 random.seed(42)
 
@@ -58,22 +59,17 @@ def generate_handle():
     return f"{handle_adjective.lower()}{handle_number}"
 
 
-def generate_identity(run, existing_handles, existing_names, persona_prompt=None,):
-    """Call Mistral to generate a name, handle, and bio from raw scores.
-    The entity is not assumed to be human. If persona_prompt is given it
-    strongly steers the identity toward that archetype."""
+def _generate_bio(post_framing, persona_prompt=None):
+    """Call Mistral to generate a bio. Thread-safe — no shared state."""
     client = Mistral(api_key=Config.MISTRAL_API_KEY)
-
-    taken_handles = ", ".join(f"@{h}" for h in existing_handles) if existing_handles else "none"
-    taken_names = ", ".join(existing_names) if existing_names else "none"
 
     persona_block = (
         f"\nPersona archetype: {persona_prompt}\n"
-        "Let this archetype strongly shape the entity's voice, name, handle, and bio.\n"
+        "Let this archetype strongly shape the entity's voice and bio.\n"
     ) if persona_prompt else ""
 
     prompt = (
-        f"Write a bio for {run.post_framing}.\n"
+        f"Write a bio for {post_framing}.\n"
         f"{persona_block}"
         "Rules: exactly 1-2 sentences, first person, no markdown, no options, no commentary.\n\n"
         "Return JSON only:\n"
@@ -84,7 +80,7 @@ def generate_identity(run, existing_handles, existing_names, persona_prompt=None
     for attempt in range(max_retries):
         try:
             resp = client.chat.complete(
-                model=Config.MISTRAL_MODEL,
+                model=Config.MISTRAL_POST_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=150,
                 temperature=1.0,
@@ -99,36 +95,25 @@ def generate_identity(run, existing_handles, existing_names, persona_prompt=None
                 time.sleep(backoff)
             else:
                 raise
+
     raw = _extract_text(resp.choices[0].message.content).strip()
-
-    # Strip markdown code fences if present
     raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("` \n")
-
-    data   = json.loads(raw)
-    bio    = data["bio"].strip().strip('"')
-
-    name   = generate_name()
-    handle = generate_handle()
-
-    # Fallback if handle collides
-    base = handle
-    i = 2
-    while handle in existing_handles:
-        handle = f"{base}{i}"
-        i += 1
-
-    # Fallback if name collides
-    base = name
-    i = 2
-    while name in existing_names:
-        name = f"{base}{i}"
-        i += 1
-
-    return name, handle, bio
+    data = json.loads(raw)
+    return data["bio"].strip().strip('"')
 
 
-def rand_score():
-    return round(random.uniform(5, 95), 1)
+# IPIP-NEO population norms (mean, sd) — scored 0–100
+_POPULATION_NORMS = {
+    "openness":          (60, 20),
+    "conscientiousness": (55, 20),
+    "extraversion":      (50, 22),
+    "agreeableness":     (62, 18),
+    "neuroticism":       (45, 22),
+}
+
+def _sample_population():
+    """Sample a realistic Big Five profile from population norms."""
+    return {k: _sample_score(*v) for k, v in _POPULATION_NORMS.items()}
 
 
 def _sample_score(mean, std):
@@ -146,36 +131,71 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
 
     existing_handles = {a.handle for a in Agent.query.all()}
     existing_names   = {a.name for a in Agent.query.all()}
-    agents_created   = []
 
-    for i in range(num_agents):
+    # ── Build score configs upfront ──────────────────────────────────────────
+    configs = []
+    for _ in range(num_agents):
         if persona:
             p = persona["priors"]
-            o = _sample_score(*p["openness"])
-            c = _sample_score(*p["conscientiousness"])
-            e = _sample_score(*p["extraversion"])
-            a = _sample_score(*p["agreeableness"])
-            n = _sample_score(*p["neuroticism"])
-            bio_prompt = persona["bio_prompt"]
+            configs.append({
+                "o": _sample_score(*p["openness"]),
+                "c": _sample_score(*p["conscientiousness"]),
+                "e": _sample_score(*p["extraversion"]),
+                "a": _sample_score(*p["agreeableness"]),
+                "n": _sample_score(*p["neuroticism"]),
+                "bio_prompt": persona["bio_prompt"],
+            })
         else:
-            o, c, e, a, n = rand_score(), rand_score(), rand_score(), rand_score(), rand_score()
-            bio_prompt = None
+            scores = _sample_population()
+            configs.append({
+                "o": scores["openness"], "c": scores["conscientiousness"],
+                "e": scores["extraversion"], "a": scores["agreeableness"],
+                "n": scores["neuroticism"],
+                "bio_prompt": None,
+            })
 
-        print(f"  [{i+1}/{num_agents}] Generating identity (O:{o} C:{c} E:{e} A:{a} N:{n})...")
-        name, handle, bio = generate_identity(run, existing_handles, existing_names, bio_prompt)
+    # ── Generate all bios in parallel ────────────────────────────────────────
+    print(f"  Generating {num_agents} agent bios in parallel...")
+    bios = [None] * num_agents
+    with ThreadPoolExecutor(max_workers=Config.MAX_WORKERS) as pool:
+        futures = {
+            pool.submit(_generate_bio, run.post_framing, cfg["bio_prompt"]): i
+            for i, cfg in enumerate(configs)
+        }
+        for future in as_completed(futures):
+            i = futures[future]
+            try:
+                bios[i] = future.result()
+                print(f"  [{i+1}/{num_agents}] bio done")
+            except Exception as exc:
+                print(f"  [{i+1}/{num_agents}] bio failed: {exc}")
+                bios[i] = "No description available."
+
+    # ── Create agents (name/handle collision-safe, sequential) ───────────────
+    agents_created = []
+    for i, cfg in enumerate(configs):
+        name   = generate_name()
+        handle = generate_handle()
+
+        base = handle
+        j = 2
+        while handle in existing_handles:
+            handle = f"{base}{j}"; j += 1
+
+        base = name
+        j = 2
+        while name in existing_names:
+            name = f"{base}{j}"; j += 1
+
         existing_handles.add(handle)
         existing_names.add(name)
 
         agent = Agent(
             run_id=run_id,
-            name=name,
-            handle=handle,
-            bio=bio,
-            openness=o,
-            conscientiousness=c,
-            extraversion=e,
-            agreeableness=a,
-            neuroticism=n,
+            name=name, handle=handle, bio=bios[i],
+            openness=cfg["o"], conscientiousness=cfg["c"],
+            extraversion=cfg["e"], agreeableness=cfg["a"],
+            neuroticism=cfg["n"],
         )
         db.session.add(agent)
         agents_created.append(agent)
@@ -195,52 +215,17 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
                 follow_pairs.add(pair)
                 db.session.add(Follow(follower_id=agent.id, followee_id=target_id))
 
+    # ── Tick-0 personality snapshots (no LLM — use initial scores directly) ──
+    for agent in agents_created:
+        db.session.add(PersonalitySnapshot(
+            run_id=run_id, agent_id=agent.id, tick_number=0,
+            openness=agent.openness, conscientiousness=agent.conscientiousness,
+            extraversion=agent.extraversion, agreeableness=agent.agreeableness,
+            neuroticism=agent.neuroticism,
+        ))
+
     db.session.commit()
     print(f"\nCreated {len(agents_created)} agents for run {run_id}.")
-
-    # ── Tick-0 IPIP baseline ─────────────────────────────────────────────────
-    print("  Running tick-0 IPIP baseline assessments...")
-    from flask import current_app
-    from simulation import _ipip_assessment_isolated
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    app = current_app._get_current_object()
-    ipip_snaps = [{"id": a.id, "bio": a.bio, "recent_posts": []} for a in agents_created]
-    ipip_results = {}
-    with ThreadPoolExecutor(max_workers=Config.IPIP_WORKERS) as pool:
-        futures = {pool.submit(_ipip_assessment_isolated, app, s): s["id"] for s in ipip_snaps}
-        for future in as_completed(futures):
-            agent_id = futures[future]
-            try:
-                ipip_results[agent_id] = future.result()
-            except Exception as e:
-                print(f"  IPIP failed for agent {agent_id}: {e}")
-
-    for agent_id, result in ipip_results.items():
-        if result is None:
-            continue
-        scores, big_five = result
-        for idx, score in enumerate(scores):
-            db.session.add(IpipResponse(
-                run_id=run_id, agent_id=agent_id, tick_number=0,
-                item_number=idx + 1, score=score,
-            ))
-        db.session.add(PersonalitySnapshot(
-            run_id=run_id, agent_id=agent_id, tick_number=0,
-            openness=big_five["O"], conscientiousness=big_five["C"],
-            extraversion=big_five["E"], agreeableness=big_five["A"],
-            neuroticism=big_five["N"],
-        ))
-        agent = db.session.get(Agent, agent_id)
-        if agent:
-            agent.openness          = big_five["O"]
-            agent.conscientiousness = big_five["C"]
-            agent.extraversion      = big_five["E"]
-            agent.agreeableness     = big_five["A"]
-            agent.neuroticism       = big_five["N"]
-        print(f"  agent {agent_id} baseline: {big_five}")
-    db.session.commit()
-    print("  Tick-0 IPIP complete.")
 
     # Mark run as running and spawn its tick thread
     run = db.session.get(Run, run_id)

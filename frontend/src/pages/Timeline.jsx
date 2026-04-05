@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import PostCard from "../components/PostCard";
 import { useRun } from "../RunContext";
@@ -11,7 +11,7 @@ const TRAITS = [
   { key: "agent_neuroticism",       label: "Neuroticism",        short: "N", color: "#fb7185" },
 ];
 
-function sort(posts, by, trait) {
+function sortPosts(posts, by, trait) {
   const copy = [...posts];
   if (by === "latest")    return copy.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   if (by === "discussed") return copy.sort((a, b) => (b.thread_count ?? b.reply_count ?? 0) - (a.thread_count ?? a.reply_count ?? 0));
@@ -32,49 +32,25 @@ const CTRL = {
 };
 
 const PAGE_SIZE = 20;
-
-function TickTooltip() {
-  const [show, setShow] = useState(false);
-  return (
-    <span
-      style={{ position: "relative", display: "inline-flex", alignItems: "center", alignSelf: "center", marginLeft: 8 }}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      <span style={{
-        fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
-        color: "var(--text)", border: "1px solid var(--border)",
-        width: 16, height: 16, borderRadius: "50%", display: "inline-flex",
-        alignItems: "center", justifyContent: "center",
-        cursor: "default", userSelect: "none", flexShrink: 0,
-      }}>?</span>
-      {show && (
-        <span style={{
-          position: "absolute", bottom: "calc(100% + 6px)", left: "50%",
-          transform: "translateX(-50%)",
-          background: "var(--bg)", border: "1px solid var(--border)",
-          padding: "7px 10px", zIndex: 100,
-          fontFamily: "var(--mono)", fontSize: 11, lineHeight: 1.6,
-          color: "var(--text-h)", whiteSpace: "nowrap",
-          pointerEvents: "none",
-        }}>
-          A <span style={{ color: "var(--pink)", fontWeight: 700 }}>tick</span> is one simulation cycle — agents read news,
-          <br />generate thoughts, and post. Each tick is one heartbeat.
-        </span>
-      )}
-    </span>
-  );
-}
+const REFRESH_MS = 15000; // poll every 15s when running
 
 const TICK_WINDOWS = [
-  { label: "all time",      ticks: null },
-  { label: "last 50 ticks", ticks: 50   },
-  { label: "last 10 ticks", ticks: 10   },
-  { label: "this tick",     ticks: 1    },
+  { label: "all",    ticks: null },
+  { label: "50t",    ticks: 50   },
+  { label: "10t",    ticks: 10   },
+  { label: "1t",     ticks: 1    },
+];
+
+const ENG_TYPES = [
+  { id: null,      label: "all"     },
+  { id: "news",    label: "news"    },
+  { id: "organic", label: "organic" },
 ];
 
 export default function Timeline() {
-  const { viewingRunId } = useRun();
+  const { viewingRunId, viewingRun, runningRunIds } = useRun();
+  const isRunning = viewingRun && runningRunIds.includes(viewingRun.id);
+
   const [posts,      setPosts]      = useState([]);
   const [error,      setError]      = useState(null);
   const [loading,    setLoading]    = useState(true);
@@ -82,45 +58,74 @@ export default function Timeline() {
   const [trait,      setTrait]      = useState(TRAITS[4]);
   const [page,       setPage]       = useState(1);
   const [tickWindow, setTickWindow] = useState(null);
+  const [engType,    setEngType]    = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
 
-  useEffect(() => {
-    setLoading(true);
-    api.listPosts(200, null, viewingRunId)
-      .then((all) => setPosts(all.filter((p) => p.parent_id === null)))
+  const maxTick = viewingRun?.last_tick ?? 0;
+
+  const maxTickRef = useRef(maxTick);
+  maxTickRef.current = maxTick;
+
+  const load = useCallback((resetPage = false) => {
+    if (!viewingRunId) return;
+    const tickMin = tickWindow != null
+      ? Math.max(1, maxTickRef.current - tickWindow + 1)
+      : undefined;
+    if (resetPage) setPage(1);
+    api.listPosts({
+      limit: 500,
+      runId: viewingRunId,
+      topLevel: true,
+      tickMin,
+      engagementType: engType ?? undefined,
+    })
+      .then((posts) => {
+        setPosts(posts);
+        setLastRefresh(new Date());
+        setError(null);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [viewingRunId]);
+  }, [viewingRunId, tickWindow, engType]);
 
-  if (loading) return <p className="muted" style={{ padding: 20 }}>loading…</p>;
-  if (error)   return <p className="error"  style={{ padding: 20 }}>{error}</p>;
+  // Reload + reset page when filters or run changes
+  useEffect(() => {
+    setLoading(true);
+    load(true);
+  }, [load]);
 
-  const maxTick = posts.reduce((m, p) => Math.max(m, p.tick_number ?? 0), 0);
+  // Auto-refresh without resetting page
+  const intervalRef = useRef(null);
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (isRunning) {
+      intervalRef.current = setInterval(() => load(false), REFRESH_MS);
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [isRunning, load]);
 
-  const filtered = sortBy === "discussed" && tickWindow != null
-    ? posts.filter((p) => p.tick_number >= maxTick - tickWindow + 1)
-    : posts;
+  const sorted = sortPosts(posts, sortBy, trait);
 
-  const sorted = sort(filtered, sortBy, trait);
+  const Divider = () => (
+    <div style={{ width: 1, height: 18, background: "var(--border)", margin: "0 8px", flexShrink: 0 }} />
+  );
 
   return (
     <div>
-      {/* Row 1: sort mode + trait buttons */}
+      {/* Controls row */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 0,
-        paddingBottom: 8,
-        flexWrap: "wrap", rowGap: 4,
+        display: "flex", alignItems: "center", flexWrap: "wrap",
+        gap: 0, rowGap: 4, paddingBottom: 8,
       }}>
-        <span style={{ fontSize: 11, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em", marginRight: 12 }}>
-          sort
-        </span>
-
+        {/* Sort */}
+        <span style={{ fontSize: 11, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em", marginRight: 8 }}>sort</span>
         {[
-          { id: "latest",    label: "Latest" },
-          { id: "discussed", label: "Most discussed" },
+          { id: "latest",    label: "Latest"    },
+          { id: "discussed", label: "Hot"       },
         ].map(({ id, label }) => (
           <button
             key={id}
-            onClick={() => { setSortBy(id); setPage(1); if (id !== "discussed") setTickWindow(null); }}
+            onClick={() => { setSortBy(id); setPage(1); }}
             style={{
               ...CTRL,
               color:       sortBy === id ? "#000" : "var(--text)",
@@ -133,8 +138,9 @@ export default function Timeline() {
           </button>
         ))}
 
-        <div style={{ width: 1, height: 18, background: "var(--border)", margin: "0 10px" }} />
+        <Divider />
 
+        {/* Trait sort */}
         {TRAITS.map((t) => {
           const active = sortBy === "trait" && trait?.key === t.key;
           return (
@@ -156,45 +162,96 @@ export default function Timeline() {
             </button>
           );
         })}
+
+        <Divider />
+
+        {/* Tick window */}
+        <span style={{ fontSize: 11, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em", marginRight: 8 }}>ticks</span>
+        {TICK_WINDOWS.map(({ label, ticks }) => {
+          const active = tickWindow === ticks;
+          return (
+            <button
+              key={label}
+              onClick={() => { setTickWindow(ticks); setPage(1); }}
+              style={{
+                ...CTRL,
+                color:       active ? "#000" : "var(--text)",
+                background:  active ? "var(--fuchsia)" : "var(--bg)",
+                borderColor: active ? "var(--fuchsia)" : "var(--border)",
+                marginRight: 2,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+
+        <Divider />
+
+        {/* Engagement type */}
+        {ENG_TYPES.map(({ id, label }) => {
+          const active = engType === id;
+          return (
+            <button
+              key={label}
+              onClick={() => { setEngType(id); setPage(1); }}
+              style={{
+                ...CTRL,
+                color:       active ? "#000" : "var(--text)",
+                background:  active ? "var(--accent-border, #444)" : "var(--bg)",
+                borderColor: active ? "var(--accent-border, #444)" : "var(--border)",
+                marginRight: 2,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+
+        {/* Live indicator + refresh */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {isRunning && (
+            <span style={{
+              fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
+              color: "var(--pink)", textTransform: "uppercase", letterSpacing: "0.1em",
+              display: "inline-flex", alignItems: "center", gap: 4,
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: "var(--pink)",
+                animation: "pulse 1.4s ease-in-out infinite",
+              }} />
+              live
+            </span>
+          )}
+          {lastRefresh && (
+            <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text)", opacity: 0.5 }}>
+              {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          )}
+          <button
+            onClick={() => { setLoading(true); load(); }}
+            style={{ ...CTRL, padding: "3px 8px", opacity: 0.7 }}
+            title="Refresh"
+          >
+            ↺
+          </button>
+        </div>
       </div>
 
-      {/* Row 2: tick window — only when Most discussed */}
-      {sortBy === "discussed" && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 0,
-          paddingBottom: 12, marginBottom: 16,
-          borderBottom: "1px solid var(--border)",
-        }}>
-          <span style={{ fontSize: 11, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.1em", marginRight: 8 }}>
-            within
-          </span>
-          {TICK_WINDOWS.map(({ label, ticks }) => {
-            const active = tickWindow === ticks;
-            return (
-              <button
-                key={label}
-                onClick={() => { setTickWindow(ticks); setPage(1); }}
-                style={{
-                  ...CTRL,
-                  color:       active ? "#000" : "var(--text)",
-                  background:  active ? "var(--fuchsia)" : "var(--bg)",
-                  borderColor: active ? "var(--fuchsia)" : "var(--border)",
-                  marginRight: 2,
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-          <TickTooltip />
-        </div>
-      )}
+      {/* Post count */}
+      <div style={{
+        borderBottom: "1px solid var(--border)",
+        marginBottom: 16, paddingBottom: 8,
+        display: "flex", alignItems: "center", gap: 8,
+      }}>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text)", opacity: 0.5 }}>
+          {loading ? "loading…" : `${sorted.length} post${sorted.length !== 1 ? "s" : ""}`}
+          {tickWindow != null && ` · last ${tickWindow} tick${tickWindow !== 1 ? "s" : ""}`}
+        </span>
+      </div>
 
-      {sortBy !== "discussed" && (
-        <div style={{ borderBottom: "1px solid var(--border)", marginBottom: 16 }} />
-      )}
-
-      {sorted.length === 0 && <p className="muted">no posts yet.</p>}
+      {!loading && sorted.length === 0 && <p className="muted">no posts yet.</p>}
       {sorted.slice(0, page * PAGE_SIZE).map((p) => <PostCard key={p.id} post={p} />)}
 
       {page * PAGE_SIZE < sorted.length && (

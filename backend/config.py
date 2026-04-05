@@ -16,6 +16,8 @@ class Config:
     }
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
     MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
+    # Separate model for post/reply generation — defaults to MISTRAL_MODEL if unset
+    MISTRAL_POST_MODEL = os.getenv("MISTRAL_POST_MODEL") or os.getenv("MISTRAL_MODEL", "mistral-large-latest")
     SIMULATION_TICK_SECONDS = int(os.getenv("SIMULATION_TICK_SECONDS", 30))
     FEED_SAMPLE_SIZE = int(os.getenv("FEED_SAMPLE_SIZE", 10))
     # Agents sampled per tick — 0 means all agents

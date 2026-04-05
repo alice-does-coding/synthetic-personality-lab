@@ -27,41 +27,68 @@ def _extract_text(content):
         return content
     return "".join(c.text for c in content if isinstance(c, TextChunk))
 
-# ── Rate limiter + retry (Mistral free tier: 1 req/sec) ──────────────────────
+# ── Rate limiter + retry ──────────────────────────────────────────────────────
 
 _rl_lock = threading.Lock()
 _rl_next = 0.0  # monotonic time when next call is allowed
 
+# Per-tick Mistral call stats (reset at tick start, accumulated across workers)
+_stats_lock   = threading.Lock()
+_stats_calls    = 0
+_stats_throttle = 0.0   # total seconds spent waiting in the rate-limit gate
+_stats_api      = 0.0   # total seconds spent waiting for Mistral to respond
 
-def _mistral_chat(client, messages, max_tokens, temperature):
-    """Call Mistral with proactive throttling + exponential-backoff retry on 429."""
-    global _rl_next
+
+def _reset_mistral_stats():
+    global _stats_calls, _stats_throttle, _stats_api
+    with _stats_lock:
+        _stats_calls = _stats_throttle = _stats_api = 0
+
+
+def _read_mistral_stats():
+    with _stats_lock:
+        return _stats_calls, _stats_throttle, _stats_api
+
+
+def _mistral_chat(client, messages, max_tokens, temperature, model=None):
+    """Call Mistral with proactive throttling + exponential-backoff retry on 429/5xx."""
+    global _rl_next, _stats_calls, _stats_throttle, _stats_api
+    model = model or Config.MISTRAL_MODEL
     max_retries = 6
     for attempt in range(max_retries):
-        # Proactive throttle: serialise all threads through a 1/sec gate
+        # Proactive throttle: serialise all threads through a shared gate
         with _rl_lock:
             now = time.monotonic()
             wait = _rl_next - now
             if wait > 0:
                 time.sleep(wait)
+                throttle_s = wait
+            else:
+                throttle_s = 0.0
             _rl_next = time.monotonic() + (1.0 / Config.MISTRAL_RATE_LIMIT)
 
+        api_start = time.monotonic()
         try:
-            return client.chat.complete(
-                model=Config.MISTRAL_MODEL,
+            resp = client.chat.complete(
+                model=model,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
+            api_s = time.monotonic() - api_start
+            with _stats_lock:
+                _stats_calls    += 1
+                _stats_throttle += throttle_s
+                _stats_api      += api_s
+            return resp
         except Exception as exc:
             err_str = repr(exc)
             is_rate_limit = "429" in err_str or "rate" in str(exc).lower()
             is_server_err = any(c in err_str for c in ("500", "502", "503", "504", "unavailable"))
             if (is_rate_limit or is_server_err) and attempt < max_retries - 1:
-                backoff = 2 ** attempt  # 1 s, 2 s, 4 s, 8 s, 16 s, 32 s
-                level = logger.warning if is_rate_limit else logger.warning
-                level("Mistral error (attempt %d/%d) — backing off %ds: %s",
-                      attempt + 1, max_retries, backoff, exc)
+                backoff = 2 ** attempt
+                logger.warning("Mistral error (attempt %d/%d) — backing off %ds: %s",
+                               attempt + 1, max_retries, backoff, exc)
                 time.sleep(backoff)
             else:
                 raise
@@ -166,6 +193,8 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
             return
 
         logger.info("tick %d starting (run %d)", tick, run_id)
+        tick_start = time.monotonic()
+        _reset_mistral_stats()
 
         news_enabled = run.news_enabled
 
@@ -196,7 +225,9 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
             return _ipip_assessment_isolated(app, snap)
 
         # ── Post generation — skip on IPIP ticks to avoid rate-limit pile-up ──
+        post_count = 0
         if not do_ipip:
+            phase_start = time.monotonic()
             post_results = {}
             with ThreadPoolExecutor(max_workers=Config.MAX_WORKERS) as pool:
                 futures = {pool.submit(post_worker, s): s["id"] for s in agent_snapshots}
@@ -206,7 +237,9 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                         post_results[agent_id] = future.result()
                     except Exception:
                         logger.exception("post generation failed for agent %d", agent_id)
+            post_gen_s = time.monotonic() - phase_start
 
+            db_start = time.monotonic()
             for agent_id, results in post_results.items():
                 if not results:
                     continue
@@ -222,7 +255,8 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                         prompt=prompt,
                         is_public=is_public,
                     ))
-                    # Register any new headlines for semantic analysis
+                    if is_public:
+                        post_count += 1
                     if news_context:
                         for h in news_context:
                             if h.get("url") and not NewsItem.query.filter_by(url=h["url"], run_id=run_id).first():
@@ -232,9 +266,11 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                                     summary=h.get("summary"),
                                     source=h.get("source"), category=h.get("category"),
                                 ))
+            db_s = time.monotonic() - db_start
 
         # ── IPIP assessment (all active agents) ──────────────────────────────────
         if do_ipip:
+            ipip_start = time.monotonic()
             logger.info("tick %d: running IPIP assessments for all %d agents", tick, len(all_agents))
             all_ipip_snaps = [_ipip_snapshot(a) for a in all_agents]
             ipip_results = {}
@@ -246,7 +282,9 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                         ipip_results[agent_id] = future.result()
                     except Exception:
                         logger.exception("IPIP assessment failed for agent %d", agent_id)
+            ipip_s = time.monotonic() - ipip_start
 
+            db_start = time.monotonic()
             for agent_id, result in ipip_results.items():
                 if result is None:
                     continue
@@ -264,7 +302,6 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     extraversion=big_five["E"], agreeableness=big_five["A"],
                     neuroticism=big_five["N"],
                 ))
-                # Update agent's live scores — bio stays frozen from seed
                 agent = db.session.get(Agent, agent_id)
                 if agent:
                     agent.openness          = big_five["O"]
@@ -272,11 +309,37 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent.extraversion      = big_five["E"]
                     agent.agreeableness     = big_five["A"]
                     agent.neuroticism       = big_five["N"]
-                logger.info("IPIP done — agent %d tick %d: %s", agent_id, tick, big_five)
+            db_s = time.monotonic() - db_start
 
         run.last_tick = tick
         db.session.commit()
-        logger.info("tick %d complete (run %d)", tick, run_id)
+
+        total_s = time.monotonic() - tick_start
+        ticks_per_hour = round(3600 / total_s) if total_s > 0 else "?"
+        calls, throttle_s, api_s = _read_mistral_stats()
+        avg_api_ms = round(api_s / calls * 1000) if calls else 0
+        if do_ipip:
+            logger.info(
+                "tick %d done (run %d) — IPIP: %d agents, %.1fs total"
+                "  [ipip: %.1fs, db: %.1fs]"
+                "  mistral: %d calls, %.1fs throttle, %.1fs net, %dms avg"
+                "  (~%s ticks/hr)",
+                tick, run_id, len(all_agents), total_s,
+                ipip_s, db_s,
+                calls, throttle_s, api_s, avg_api_ms,
+                ticks_per_hour,
+            )
+        else:
+            logger.info(
+                "tick %d done (run %d) — %d posts, %d agents, %.1fs total"
+                "  [post_gen: %.1fs, db: %.1fs]"
+                "  mistral: %d calls, %.1fs throttle, %.1fs net, %dms avg"
+                "  (~%s ticks/hr)",
+                tick, run_id, post_count, len(agents), total_s,
+                post_gen_s, db_s,
+                calls, throttle_s, api_s, avg_api_ms,
+                ticks_per_hour,
+            )
 
 
 # ── Agent snapshots ───────────────────────────────────────────────────────────
@@ -361,7 +424,10 @@ def _mistral_client():
 
 def _build_system_prompt(snap):
     return (
-        f"About you: {snap['bio'] or 'No description available.'}"
+        f"About you: {snap['bio'] or 'No description available.'}\n\n"
+        "When you post, write plain conversational text. "
+        "No wrapping quotes. No markdown headers or bullet points. "
+        "Do not count or annotate character length."
     )
 
 
@@ -371,9 +437,28 @@ def _build_ipip_system_prompt(snap):
     return "Assess yourself based only on your recent posts and thoughts."
 
 
+def _clean_post(text):
+    """Strip common LLM formatting artifacts from a post."""
+    t = text.strip()
+    # Remove wrapping quotes (single or double)
+    if len(t) >= 2 and t[0] in ('"', "'", "\u201c", "\u201d") and t[-1] in ('"', "'", "\u201c", "\u201d"):
+        t = t[1:-1].strip()
+    # Strip leading markdown decorators (* ** _) that never close
+    t = re.sub(r'^[\*_]+\s*', '', t)
+    # Strip trailing character-count annotations like (139) or [140]
+    t = re.sub(r'\s*[\(\[]\d{1,3}[\)\]]\s*$', '', t)
+    # Strip numbered list prefix if the model still adds one
+    t = re.sub(r'^\d+[\.\)]\s*', '', t)
+    return t.strip()
+
+
 def _generate_thoughts(snap, client, user_prompt, n):
-    """Generate n distinct thoughts in one call, separated by ---."""
-    prompt = user_prompt + f"\n\nWrite {n} different thoughts. Each must be 140 characters or fewer. Separate them with ---"
+    """Generate n distinct thoughts in one call, separated by |||."""
+    prompt = (
+        user_prompt
+        + f"\n\nRespond with {n} different thoughts, each under 140 characters. "
+        "Separate them with ||| and nothing else. Output only the thoughts, no numbering, no quotes."
+    )
     resp = _mistral_chat(
         client,
         messages=[
@@ -382,34 +467,15 @@ def _generate_thoughts(snap, client, user_prompt, n):
         ],
         max_tokens=Config.MAX_POST_TOKENS * n,
         temperature=0.9,
+        model=Config.MISTRAL_POST_MODEL,
     )
     raw = _extract_text(resp.choices[0].message.content).strip()
-    thoughts = [re.sub(r'^\d+[\.\)]\s*', '', t.strip())[:140] for t in raw.split("---") if t.strip()]
-    return thoughts[:n] if thoughts else [raw[:140]]
-
-
-def _select_thought(snap, thoughts, client):
-    """Ask the agent which thought to post. Returns 0-based index of selected thought."""
-    numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(thoughts))
-    resp = _mistral_chat(
-        client,
-        messages=[
-            {"role": "system", "content": _build_system_prompt(snap)},
-            {"role": "user",   "content": (
-                f"You had these thoughts:\n\n{numbered}\n\n"
-                "Which do you post? Reply with only the number."
-            )},
-        ],
-        max_tokens=5,
-        temperature=0.3,
-    )
-    raw = _extract_text(resp.choices[0].message.content).strip()
-    digits = re.findall(r"\d", raw)
-    if digits:
-        idx = int(digits[0]) - 1
-        if 0 <= idx < len(thoughts):
-            return idx
-    return 0
+    thoughts = [_clean_post(t) for t in raw.split("|||") if t.strip()]
+    # fallback: if separator wasn't used, split on newlines
+    if len(thoughts) < 2:
+        thoughts = [_clean_post(t) for t in raw.splitlines() if t.strip()]
+    thoughts = [t[:140] for t in thoughts if t]
+    return thoughts[:n] if thoughts else [_clean_post(raw)[:140]]
 
 
 def _generate_post(snap):
@@ -425,12 +491,13 @@ def _generate_post(snap):
             client,
             messages=[
                 {"role": "system", "content": _build_system_prompt(snap)},
-                {"role": "user",   "content": user_prompt + "\n\nReply in 140 characters or fewer."},
+                {"role": "user",   "content": user_prompt + "\n\nReply in plain text, under 140 characters. No quotes around your reply."},
             ],
             max_tokens=Config.MAX_POST_TOKENS,
             temperature=0.9,
+            model=Config.MISTRAL_POST_MODEL,
         )
-        content = _extract_text(resp.choices[0].message.content).strip()[:140]
+        content = _clean_post(_extract_text(resp.choices[0].message.content))[:140]
         return [(content, r["id"], None, "reply", user_prompt, True)]
 
     # Top-level posts: generate N thoughts, agent selects one to publish
@@ -451,7 +518,7 @@ def _generate_post(snap):
         engagement_type = "organic"
 
     thoughts = _generate_thoughts(snap, client, user_prompt, Config.N_THOUGHTS)
-    selected_idx = _select_thought(snap, thoughts, client) if len(thoughts) > 1 else 0
+    selected_idx = 0
 
     return [
         (
