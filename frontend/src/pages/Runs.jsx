@@ -162,6 +162,7 @@ const DEFAULTS = {
   batch_mode: true,
   ipip_grounded: true,
   random_seed: "",
+  name_pool_text: "",
   agent_framing: "an entity on a social network",
   persona: null,
   agent_count: 50,
@@ -201,6 +202,9 @@ function CreateRunForm({ onCreated, onCancel }) {
         agent_count:  parseInt(form.agent_count) || null,
         tick_limit:   parseInt(form.tick_limit)  || null,
         random_seed:  form.random_seed !== "" ? parseInt(form.random_seed) : null,
+        name_pool:    form.name_pool_text.trim()
+          ? form.name_pool_text.split("\n").map(s => s.trim()).filter(Boolean)
+          : null,
       });
       onCreated(run);
     } catch (e) {
@@ -304,6 +308,21 @@ function CreateRunForm({ onCreated, onCancel }) {
         {form.persona === null && (
           <span style={{ ...mono, fontSize: 10, color: "var(--text)", opacity: 0.7 }}>
             Agents sampled from IPIP-NEO population norms — realistic distribution, no archetype.
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <Textarea
+          label="name pool (one per line)"
+          value={form.name_pool_text}
+          onChange={set("name_pool_text")}
+          placeholder={"Kim Jong-un\nVladimir Putin\nAlexander Lukashenko\n..."}
+          rows={4}
+        />
+        {form.name_pool_text.trim() && (
+          <span style={{ ...mono, fontSize: 9, color: "var(--text-dim)" }}>
+            {form.name_pool_text.split("\n").filter(s => s.trim()).length} agents · overrides agent count · bio generated from name + framing
           </span>
         )}
       </div>

@@ -133,15 +133,22 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
     if run.random_seed is not None:
         random.seed(run.random_seed)
 
-    is_pokemon = (run.persona == "pokemon")
+    is_pokemon  = (run.persona == "pokemon")
+    custom_pool = run.name_pool if run.name_pool else None
+
     if is_pokemon:
         num_agents = len(GEN1_POKEMON)
-        pokemon_names = list(GEN1_POKEMON)  # already in Pokédex order; respect random_seed shuffle if desired
+        name_list  = list(GEN1_POKEMON)
+    elif custom_pool:
+        num_agents = len(custom_pool)
+        name_list  = list(custom_pool)
+    else:
+        name_list  = None
 
     existing_handles = {a.handle for a in Agent.query.all()}
     existing_names   = {a.name for a in Agent.query.all()}
 
-    # ── Build score configs upfront ──────────────────���───────────────────────
+    # ── Build score configs upfront ──────────────────────────────────────────
     configs = []
     for i in range(num_agents):
         if persona:
@@ -162,11 +169,14 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
                 "n": scores["neuroticism"],
                 "bio_prompt": None,
             }
-        if is_pokemon:
-            pname = pokemon_names[i]
-            cfg["name_override"]   = pname
-            cfg["handle_base"]     = pname.lower().replace(" ", "_").replace("-", "_")
-            cfg["bio_framing"]     = f"{pname}, an original Generation 1 Pokémon"
+        if name_list and i < len(name_list):
+            entry = name_list[i]
+            cfg["name_override"] = entry
+            cfg["handle_base"]   = re.sub(r"[^a-z0-9_]", "", entry.lower().replace(" ", "_").replace("-", "_"))[:30] or f"agent{i}"
+            cfg["bio_framing"]   = (
+                f"{entry}, an original Generation 1 Pokémon" if is_pokemon
+                else f"{entry}, {run.post_framing}"
+            )
         configs.append(cfg)
 
     # ── Generate all bios in parallel ─────────────────���────────────────────��─

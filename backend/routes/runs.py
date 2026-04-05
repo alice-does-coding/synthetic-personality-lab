@@ -70,6 +70,7 @@ def create_run():
         batch_mode=data.get("batch_mode", False),
         ipip_grounded=data.get("ipip_grounded", True),
         random_seed=data.get("random_seed"),
+        name_pool=data.get("name_pool") or None,
         notes=data.get("notes"),
         status="seeding",
     )
