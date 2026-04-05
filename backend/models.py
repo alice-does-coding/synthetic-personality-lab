@@ -190,7 +190,7 @@ class NewsItem(db.Model):
 
     id         = db.Column(db.Integer, primary_key=True)
     run_id     = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False)
-    url        = db.Column(db.String(500), unique=True, nullable=False)
+    url        = db.Column(db.String(500), nullable=False)
     title      = db.Column(db.Text, nullable=False)
     summary    = db.Column(db.Text, nullable=True)
     source     = db.Column(db.String(100))
@@ -199,6 +199,10 @@ class NewsItem(db.Model):
     emotion    = db.Column(db.String(50), nullable=True) # e.g. "anxiety", "hope", "outrage"
     analyzed   = db.Column(db.Boolean, default=False, nullable=False)
     first_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("run_id", "url", name="uq_news_item_run_url"),
+    )
 
     def to_dict(self):
         return {
