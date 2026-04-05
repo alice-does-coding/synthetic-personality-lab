@@ -18,15 +18,15 @@ class Config:
     MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
     SIMULATION_TICK_SECONDS = int(os.getenv("SIMULATION_TICK_SECONDS", 30))
     FEED_SAMPLE_SIZE = int(os.getenv("FEED_SAMPLE_SIZE", 10))
-    # Agents sampled per tick — keeps API calls manageable
-    AGENTS_PER_TICK = int(os.getenv("AGENTS_PER_TICK", 10))
-    # Concurrency caps — with rate limiting, extra threads just sleep; keep low
-    MAX_WORKERS = int(os.getenv("MAX_WORKERS", 3))
-    IPIP_WORKERS = int(os.getenv("IPIP_WORKERS", 3))
+    # Agents sampled per tick — 0 means all agents
+    AGENTS_PER_TICK = int(os.getenv("AGENTS_PER_TICK", 50))
+    # Concurrency — match to Mistral rate limit
+    MAX_WORKERS = int(os.getenv("MAX_WORKERS", 12))
+    IPIP_WORKERS = int(os.getenv("IPIP_WORKERS", 12))
     # Number of simulation ticks between full IPIP-NEO-120 re-assessments
     REASSESSMENT_INTERVAL = int(os.getenv("REASSESSMENT_INTERVAL", 10))
-    # Paid tier can go much higher — tune via env var if you hit limits
-    MISTRAL_RATE_LIMIT = float(os.getenv("MISTRAL_RATE_LIMIT", 5.0))
+    # Paid tier: 12 req/sec
+    MISTRAL_RATE_LIMIT = float(os.getenv("MISTRAL_RATE_LIMIT", 12.0))
     # Local NLP microservice
     NLP_SERVICE_URL = os.getenv("NLP_SERVICE_URL", "http://localhost:5001")
     # Hugging Face Inference API key — enables news sentiment/emotion analysis
@@ -34,7 +34,7 @@ class Config:
     # Thoughts generated per top-level post tick — 1 published, rest become inner monologue
     N_THOUGHTS = int(os.getenv("N_THOUGHTS", 3))
     # Max tokens per post/reply — increase if agents are getting cut off
-    MAX_POST_TOKENS = int(os.getenv("MAX_POST_TOKENS", 300))
+    MAX_POST_TOKENS = int(os.getenv("MAX_POST_TOKENS", 60))  # ~140 chars
     # Admin key — required to call sim control and agent write endpoints
     ADMIN_KEY = os.getenv("ADMIN_KEY")
     # Restrict CORS in production — set to https://lurkr.net via env var

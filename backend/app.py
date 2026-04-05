@@ -7,7 +7,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from config import Config
-from database import init_db
+from database import db, init_db
 
 
 def create_app(config_class=Config):
@@ -45,7 +45,23 @@ def create_app(config_class=Config):
             from simulation import run_tick
             while True:
                 run_tick(app)
-                time.sleep(app.config["SIMULATION_TICK_SECONDS"])
+                interval = _tick_interval(app)
+                if interval > 0:
+                    time.sleep(interval)
+
+        def _tick_interval(app):
+            """Return 0 for batch runs so ticks chain back-to-back."""
+            try:
+                with app.app_context():
+                    from models import Run, SimState
+                    state = SimState.get()
+                    if state.run_id:
+                        run = db.session.get(Run, state.run_id)
+                        if run and run.batch_mode:
+                            return 0
+            except Exception:
+                pass
+            return app.config["SIMULATION_TICK_SECONDS"]
 
         threading.Thread(target=_tick_loop, daemon=True).start()
 

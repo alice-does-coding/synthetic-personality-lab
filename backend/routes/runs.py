@@ -71,6 +71,7 @@ def create_run():
         agent_count=data.get("agent_count"),
         tick_limit=data.get("tick_limit"),
         tick_duration_s=data.get("tick_duration_s"),
+        batch_mode=data.get("batch_mode", False),
         notes=data.get("notes"),
         status="seeding",
     )

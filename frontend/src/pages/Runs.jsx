@@ -153,6 +153,7 @@ const DEFAULTS = {
   description: "",
   model: "mistral-large-latest",
   news_enabled: true,
+  batch_mode: false,
   post_framing: "an entity on a social network",
   ipip_framing: "your recent inner and outer life",
   seed_distribution: "random",
@@ -217,6 +218,7 @@ function CreateRunForm({ onCreated, onCancel }) {
       {section("stimulus")}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Toggle label="news" value={form.news_enabled} onChange={set("news_enabled")} />
+        <Toggle label="batch mode" value={form.batch_mode} onChange={set("batch_mode")} />
       </div>
 
       {section("framing")}
@@ -315,6 +317,7 @@ function RunCard({ run, isActive, isRunning, isAdmin, queuePos, onActivate, onSt
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 14 }}>
         <FIELD label="model" value={run.model} />
         <FIELD label="news" value={run.news_enabled ? "enabled" : "disabled"} color={run.news_enabled ? "#2dd4bf" : "#ff3ea5"} />
+        {run.batch_mode && <FIELD label="mode" value="batch" color="#c77dff" />}
         <FIELD label="framing" value={run.post_framing} />
         <FIELD label="seed" value={run.seed_distribution} />
         <FIELD label="agents" value={run.agent_count} />

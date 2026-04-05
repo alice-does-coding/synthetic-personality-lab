@@ -149,7 +149,8 @@ def _run_tick_inner(app, force=False, force_ipip=False):
         news_enabled = run.news_enabled if run else True
 
         all_agents = Agent.query.filter_by(is_active=True, run_id=run_id).all()
-        agents = random.sample(all_agents, min(Config.AGENTS_PER_TICK, len(all_agents)))
+        cap = Config.AGENTS_PER_TICK
+        agents = all_agents if cap == 0 else random.sample(all_agents, min(cap, len(all_agents)))
         do_ipip = force_ipip or (tick % Config.REASSESSMENT_INTERVAL == 0)
 
         # Ghost mode — all agents reply to the pinned post this tick, post stays in network
