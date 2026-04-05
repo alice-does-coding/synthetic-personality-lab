@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const COMPONENTS = {
   // Paragraphs — no margin, inherit everything from parent
@@ -75,7 +76,7 @@ const COMPONENTS = {
 export default function MarkdownText({ children, style }) {
   return (
     <span style={{ display: "block", ...style }}>
-      <ReactMarkdown components={COMPONENTS}>
+      <ReactMarkdown components={COMPONENTS} remarkPlugins={[remarkGfm]}>
         {children ?? ""}
       </ReactMarkdown>
     </span>
