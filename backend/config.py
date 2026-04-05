@@ -10,6 +10,10 @@ class Config:
     # Render provides postgres:// but SQLAlchemy requires postgresql://
     SQLALCHEMY_DATABASE_URI = _db_url.replace("postgres://", "postgresql://", 1)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,       # verify connection before use — kills stale SSL sockets
+        "pool_recycle":  300,        # recycle connections after 5 min regardless
+    }
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
     MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
     SIMULATION_TICK_SECONDS = int(os.getenv("SIMULATION_TICK_SECONDS", 30))
