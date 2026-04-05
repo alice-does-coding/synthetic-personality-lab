@@ -74,7 +74,7 @@ const TICK_WINDOWS = [
 ];
 
 export default function Timeline() {
-  const { activeRunId } = useRun();
+  const { viewingRunId } = useRun();
   const [posts,      setPosts]      = useState([]);
   const [error,      setError]      = useState(null);
   const [loading,    setLoading]    = useState(true);
@@ -85,11 +85,11 @@ export default function Timeline() {
 
   useEffect(() => {
     setLoading(true);
-    api.listPosts(200, null, activeRunId)
+    api.listPosts(200, null, viewingRunId)
       .then((all) => setPosts(all.filter((p) => p.parent_id === null)))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [activeRunId]);
+  }, [viewingRunId]);
 
   if (loading) return <p className="muted" style={{ padding: 20 }}>loading…</p>;
   if (error)   return <p className="error"  style={{ padding: 20 }}>{error}</p>;

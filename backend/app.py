@@ -1,5 +1,4 @@
 import threading
-import time
 
 from flask import Flask
 from flask_cors import CORS
@@ -41,29 +40,16 @@ def create_app(config_class=Config):
     app.register_blueprint(runs_bp, url_prefix="/api/runs")
 
     if not app.config.get("TESTING"):
-        def _tick_loop():
-            from simulation import run_tick
-            while True:
-                run_tick(app)
-                interval = _tick_interval(app)
-                if interval > 0:
-                    time.sleep(interval)
+        # Resume any runs that were mid-flight when the process last stopped
+        def _resume_running_runs():
+            from simulation import start_run_thread
+            from models import Run
+            with app.app_context():
+                running = Run.query.filter_by(status="running").all()
+                for run in running:
+                    start_run_thread(app, run.id)
 
-        def _tick_interval(app):
-            """Return 0 for batch runs so ticks chain back-to-back."""
-            try:
-                with app.app_context():
-                    from models import Run, SimState
-                    state = SimState.get()
-                    if state.run_id:
-                        run = db.session.get(Run, state.run_id)
-                        if run and run.batch_mode:
-                            return 0
-            except Exception:
-                pass
-            return app.config["SIMULATION_TICK_SECONDS"]
-
-        threading.Thread(target=_tick_loop, daemon=True).start()
+        threading.Thread(target=_resume_running_runs, daemon=True).start()
 
         from simulation import start_news_analyzer, start_post_analyzer
         start_news_analyzer(app)

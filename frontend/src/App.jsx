@@ -29,21 +29,20 @@ function useDarkMode() {
 }
 
 function SimStatus() {
-  const { activeRun, currentTick, isRunning } = useRun();
-  if (currentTick === null && !activeRun) return null;
+  const { viewingRun, runningRunIds } = useRun();
+  if (!viewingRun) return null;
+  const isRunning = runningRunIds.includes(viewingRun.id);
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text)", fontFamily: "var(--mono)", minWidth: 0 }}>
-      {activeRun && (
-        <span style={{
-          color: "var(--text-h)", fontWeight: 700,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          maxWidth: 120,
-        }} title={activeRun.name}>
-          {activeRun.name}
-        </span>
-      )}
+      <span style={{
+        color: "var(--text-h)", fontWeight: 700,
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        maxWidth: 120,
+      }} title={viewingRun.name}>
+        {viewingRun.name}
+      </span>
       <span style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
-        t{currentTick ?? "—"}
+        t{viewingRun.last_tick ?? "—"}
         <span style={{
           display: "inline-block",
           width: 6, height: 6,

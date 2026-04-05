@@ -45,7 +45,7 @@ function nodeRadius(val, max) {
 }
 
 export default function Graph() {
-  const { activeRunId } = useRun();
+  const { viewingRunId } = useRun();
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [trait,     setTrait]     = useState("extraversion");
   const [sizeBy,    setSizeBy]    = useState("follower_count");
@@ -62,11 +62,11 @@ export default function Graph() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    api.graph(activeRunId)
+    api.graph(viewingRunId)
       .then(setGraphData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [activeRunId]);
+  }, [viewingRunId]);
 
   useEffect(() => {
     if (!graphRef.current || graphData.nodes.length === 0) return;

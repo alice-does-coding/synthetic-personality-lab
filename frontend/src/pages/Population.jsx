@@ -320,7 +320,7 @@ function AgentRadar({ agent }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Population() {
-  const { activeRunId } = useRun();
+  const { viewingRunId } = useRun();
   const [agents,       setAgents]       = useState([]);
   const [drift,        setDrift]        = useState([]);
   const [trajectories, setTrajectories] = useState([]);
@@ -330,11 +330,11 @@ export default function Population() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    Promise.all([api.listAgents(activeRunId), api.populationDrift(activeRunId), api.trajectories(activeRunId)])
+    Promise.all([api.listAgents(viewingRunId), api.populationDrift(viewingRunId), api.trajectories(viewingRunId)])
       .then(([a, d, t]) => { setAgents(a); setDrift(d); setTrajectories(t); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [activeRunId]);
+  }, [viewingRunId]);
 
   if (loading) return <p className="muted">Loading…</p>;
   if (error)   return <p className="error">{error}</p>;

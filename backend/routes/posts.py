@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from auth import require_admin
 from database import db
-from models import Agent, Post, SimState
+from models import Agent, Post, Run
 
 posts_bp = Blueprint("posts", __name__)
 
@@ -76,33 +76,36 @@ def get_feed(agent_id):
 @posts_bp.route("/ghost", methods=["POST"])
 @require_admin
 def create_ghost_post():
-    data    = request.get_json()
-    content = (data or {}).get("content", "").strip()
-    run_id  = SimState.get().run_id
+    data    = request.get_json() or {}
+    content = data.get("content", "").strip()
+    run_id  = data.get("run_id")
     if not content:
         return jsonify({"error": "content required"}), 400
+    if not run_id:
+        return jsonify({"error": "run_id required"}), 400
 
-    # Find or create the reserved ghost agent (inactive — never posts on its own)
-    ghost = Agent.query.filter_by(handle="ghost").first()
+    run = Run.query.get_or_404(run_id)
+
+    # Each run has its own ghost agent to avoid handle collisions
+    ghost_handle = f"ghost-{run_id}"
+    ghost = Agent.query.filter_by(handle=ghost_handle).first()
     if not ghost:
-        # TODO: Add run_id here.
-        ghost = Agent(run_id=run_id, name="·", handle="ghost", bio="", is_active=False)
+        ghost = Agent(run_id=run_id, name="·", handle=ghost_handle, bio="", is_active=False)
         db.session.add(ghost)
         db.session.flush()
 
-    state = SimState.get()
-    post  = Post(
+    post = Post(
         run_id=run_id,
         agent_id=ghost.id,
         content=content,
-        tick_number=state.current_tick,
+        tick_number=run.last_tick or 0,
         engagement_type="ghost",
         is_public=True,
     )
     db.session.add(post)
     db.session.flush()
 
-    state.ghost_post_id = post.id
+    run.ghost_post_id = post.id
     db.session.commit()
     return jsonify(post.to_dict()), 201
 

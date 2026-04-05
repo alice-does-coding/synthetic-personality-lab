@@ -20,6 +20,7 @@ class Run(db.Model):
     tick_limit        = db.Column(db.Integer)
     tick_duration_s   = db.Column(db.Integer)
     batch_mode        = db.Column(db.Boolean, default=False, nullable=False)
+    ghost_post_id     = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
     status            = db.Column(db.String(20), nullable=False, default="pending")
     last_tick         = db.Column(db.Integer, default=0, nullable=False)
     # pending  — queued, seeding not started
@@ -55,6 +56,7 @@ class Run(db.Model):
             "tick_limit":        self.tick_limit,
             "tick_duration_s":   self.tick_duration_s,
             "batch_mode":        self.batch_mode,
+            "ghost_post_id":     self.ghost_post_id,
             "status":            self.status,
             "last_tick":         self.last_tick,
             "started_at":        self.started_at.isoformat() if self.started_at else None,

@@ -1,59 +1,55 @@
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify, current_app, request
 
 from auth import require_admin
-from database import db
-from models import SimState
+from config import Config
 
 sim_bp = Blueprint("sim", __name__)
 
 
 @sim_bp.route("/status", methods=["GET"])
 def status():
-    from config import Config
-    state = SimState.get()
+    from simulation import get_running_run_ids
     return jsonify({
-        "current_tick": state.current_tick,
-        "is_running": state.is_running,
-        "active_run_id": state.run_id,
-        "agents_per_tick": Config.AGENTS_PER_TICK,
-        "rate_limit": Config.MISTRAL_RATE_LIMIT,
+        "running_run_ids":  get_running_run_ids(),
+        "agents_per_tick":  Config.AGENTS_PER_TICK,
+        "rate_limit":       Config.MISTRAL_RATE_LIMIT,
+        "max_workers":      Config.MAX_WORKERS,
     })
-
-
-@sim_bp.route("/start", methods=["POST"])
-@require_admin
-def start():
-    state = SimState.get()
-    state.is_running = True
-    db.session.commit()
-    return jsonify({"ok": True, "current_tick": state.current_tick})
-
-
-@sim_bp.route("/stop", methods=["POST"])
-@require_admin
-def stop():
-    state = SimState.get()
-    state.is_running = False
-    db.session.commit()
-    return jsonify({"ok": True, "current_tick": state.current_tick})
 
 
 @sim_bp.route("/tick", methods=["POST"])
 @require_admin
 def manual_tick():
-    """Fire a single tick immediately — useful for development."""
+    """Fire a single tick for a specific run."""
+    data   = request.get_json() or {}
+    run_id = data.get("run_id")
+    if not run_id:
+        return jsonify({"error": "run_id required"}), 400
+    import threading
     from simulation import run_tick
-    run_tick(current_app._get_current_object(), force=True)
-    state = SimState.get()
-    return jsonify({"ok": True, "current_tick": state.current_tick})
+    app = current_app._get_current_object()
+    threading.Thread(
+        target=run_tick,
+        kwargs={"app": app, "run_id": run_id, "force": True},
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True, "run_id": run_id})
 
 
 @sim_bp.route("/assess", methods=["POST"])
 @require_admin
 def manual_assess():
-    """Kick off a full IPIP assessment in the background and return immediately."""
+    """Force a full IPIP assessment for a specific run."""
+    data   = request.get_json() or {}
+    run_id = data.get("run_id")
+    if not run_id:
+        return jsonify({"error": "run_id required"}), 400
     import threading
     from simulation import run_tick
     app = current_app._get_current_object()
-    threading.Thread(target=run_tick, kwargs={"app": app, "force": True, "force_ipip": True}, daemon=True).start()
-    return jsonify({"ok": True, "message": "assessment started"})
+    threading.Thread(
+        target=run_tick,
+        kwargs={"app": app, "run_id": run_id, "force": True, "force_ipip": True},
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True, "run_id": run_id})

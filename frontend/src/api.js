@@ -21,11 +21,9 @@ async function adminReq(path, options = {}) {
 
 export const api = {
   // sim
-  simStatus:  ()         => req("/sim/status"),
-  simStart:   ()         => adminReq("/sim/start",  { method: "POST" }),
-  simStop:    ()         => adminReq("/sim/stop",   { method: "POST" }),
-  simTick:    ()         => adminReq("/sim/tick",   { method: "POST" }),
-  simAssess:  ()         => adminReq("/sim/assess", { method: "POST" }),
+  simStatus:  ()              => req("/sim/status"),
+  simTick:    (runId)         => adminReq("/sim/tick",   { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId }) }),
+  simAssess:  (runId)         => adminReq("/sim/assess", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId }) }),
 
   // agents
   listAgents:         (runId)     => req(`/agents/${runId ? `?run_id=${runId}` : ""}`),
@@ -53,13 +51,12 @@ export const api = {
   feed:      (agentId, limit = 20) => req(`/posts/feed/${agentId}?limit=${limit}`),
   replies:   (postId)              => req(`/posts/${postId}/replies`),
   thread:    (postId)              => req(`/posts/${postId}/thread`),
-  ghostPost: (content)            => adminReq("/posts/ghost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }),
+  ghostPost: (runId, content)     => adminReq("/posts/ghost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId, content }) }),
 
   // runs
   listRuns:    ()        => req("/runs/"),
   listPersonas: ()       => req("/runs/personas"),
   createRun:   (body)    => adminReq("/runs/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
-  activateRun: (id)      => adminReq(`/runs/${id}/activate`, { method: "POST" }),
   startRun:    (id)      => adminReq(`/runs/${id}/start`,    { method: "POST" }),
   stopRun:     (id)      => adminReq(`/runs/${id}/stop`,     { method: "POST" }),
   deleteRun:   (id)      => adminReq(`/runs/${id}`,          { method: "DELETE" }),

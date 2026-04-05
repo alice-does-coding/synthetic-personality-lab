@@ -210,7 +210,7 @@ function AgentProfileGrid({ data }) {
 }
 
 export default function News() {
-  const { activeRunId } = useRun();
+  const { viewingRunId } = useRun();
   const [items,        setItems]        = useState([]);
   const [newsOverTime, setNewsOverTime] = useState([]);
   const [postOverTime, setPostOverTime] = useState([]);
@@ -224,11 +224,11 @@ export default function News() {
     setLoading(true);
     setError(null);
     Promise.all([
-      api.listNews(activeRunId),
-      api.newsSentimentOverTime(activeRunId),
-      api.postSentimentOverTime(activeRunId),
-      api.sentimentContagion(activeRunId),
-      api.postPersonalityCorrelation(activeRunId),
+      api.listNews(viewingRunId),
+      api.newsSentimentOverTime(viewingRunId),
+      api.postSentimentOverTime(viewingRunId),
+      api.sentimentContagion(viewingRunId),
+      api.postPersonalityCorrelation(viewingRunId),
     ])
       .then(([n, ns, ps, c, corr]) => {
         setItems(n);
@@ -239,7 +239,7 @@ export default function News() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [activeRunId]);
+  }, [viewingRunId]);
 
   if (loading) return <p className="muted" style={{ padding: 20 }}>loading…</p>;
   if (error)   return <p className="error"  style={{ padding: 20 }}>{error}</p>;

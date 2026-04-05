@@ -83,7 +83,7 @@ function AgentCard({ agent }) {
 }
 
 export default function Agents() {
-  const { activeRunId } = useRun();
+  const { viewingRunId } = useRun();
   const [agents, setAgents]   = useState([]);
   const [sort, setSort]       = useState("name");
   const [error, setError]     = useState(null);
@@ -91,11 +91,11 @@ export default function Agents() {
 
   useEffect(() => {
     setLoading(true);
-    api.listAgents(activeRunId)
+    api.listAgents(viewingRunId)
       .then(setAgents)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [activeRunId]);
+  }, [viewingRunId]);
 
   const sorted = [...agents].sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name);

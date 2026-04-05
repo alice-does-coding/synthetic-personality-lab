@@ -242,13 +242,16 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
     db.session.commit()
     print("  Tick-0 IPIP complete.")
 
-    # Mark run ready and start it if nothing else is running
+    # Mark run as running and spawn its tick thread
     run = db.session.get(Run, run_id)
     if run and run.status == "seeding":
-        run.status = "ready"
+        from datetime import datetime
+        run.status = "running"
+        run.started_at = datetime.utcnow()
         db.session.commit()
-        from simulation import advance_queue
-        advance_queue()
+        from flask import current_app
+        from simulation import start_run_thread
+        start_run_thread(current_app._get_current_object(), run_id)
 
     return agents_created
 

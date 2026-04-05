@@ -13,7 +13,7 @@ from mistralai.client.models import TextChunk
 from config import Config
 from database import db
 from ipip import ITEMS, score_responses
-from models import Agent, IpipResponse, NewsItem, PersonalitySnapshot, Post, Run, SimState
+from models import Agent, IpipResponse, NewsItem, PersonalitySnapshot, Post, Run
 from news import get_headlines_for_agent
 
 logger = logging.getLogger(__name__)
@@ -66,104 +66,123 @@ def _mistral_chat(client, messages, max_tokens, temperature):
             else:
                 raise
 
-# ── Tick overlap guard ────────────────────────────────────────────────────────
-_tick_running = False
-_tick_lock = threading.Lock()
+# ── Per-run thread management ─────────────────────────────────────────────────
+
+_run_threads: dict = {}       # run_id → Thread
+_run_tick_locks: dict = {}    # run_id → Lock (prevents overlap between loop + manual tick)
+_run_state_lock = threading.Lock()
 
 
-# ── Queue advancement ────────────────────────────────────────────────────────
-
-def advance_queue():
-    """Start the next ready run if nothing is currently running.
-    Must be called within an active app context."""
-    state = SimState.get()
-    if state.is_running:
-        return
-    next_run = Run.query.filter_by(status="ready").order_by(Run.id).first()
-    if not next_run:
-        return
-    from datetime import datetime
-    state.run_id = next_run.id
-    state.current_tick = 0
-    next_run.status = "running"
-    next_run.started_at = datetime.utcnow()
-    state.is_running = True
-    db.session.commit()
-    logger.info("queue advanced — run %d (%s) now running", next_run.id, next_run.name)
+def _get_tick_lock(run_id):
+    with _run_state_lock:
+        if run_id not in _run_tick_locks:
+            _run_tick_locks[run_id] = threading.Lock()
+        return _run_tick_locks[run_id]
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
-
-def run_tick(app, force=False, force_ipip=False):
-    """Advance the simulation by one tick. Called by APScheduler."""
-    global _tick_running
-    with _tick_lock:
-        if _tick_running:
-            logger.warning("tick skipped — previous tick still running")
+def start_run_thread(app, run_id):
+    """Spawn a dedicated tick thread for run_id. No-op if one is already alive."""
+    with _run_state_lock:
+        existing = _run_threads.get(run_id)
+        if existing and existing.is_alive():
+            logger.info("run %d already has a live tick thread", run_id)
             return
-        _tick_running = True
+        t = threading.Thread(
+            target=_tick_loop_for_run,
+            args=(app, run_id),
+            daemon=True,
+            name=f"tick-{run_id}",
+        )
+        _run_threads[run_id] = t
+        t.start()
+    logger.info("tick thread started for run %d", run_id)
+
+
+def get_running_run_ids():
+    """Return list of run IDs with live tick threads."""
+    with _run_state_lock:
+        return [rid for rid, t in _run_threads.items() if t.is_alive()]
+
+
+def run_tick(app, run_id, force=False, force_ipip=False):
+    """Fire a single manual tick for a specific run. Skips if a tick is already in progress."""
+    lock = _get_tick_lock(run_id)
+    if not lock.acquire(blocking=False):
+        logger.warning("manual tick skipped — run %d already ticking", run_id)
+        return
     try:
-        _run_tick_inner(app, force=force, force_ipip=force_ipip)
+        _run_tick_for_run(app, run_id, force=force, force_ipip=force_ipip)
     except Exception:
-        logger.exception("tick crashed")
+        logger.exception("manual tick crashed for run %d", run_id)
     finally:
-        with _tick_lock:
-            _tick_running = False
+        lock.release()
 
 
-def _run_tick_inner(app, force=False, force_ipip=False):
+def _tick_loop_for_run(app, run_id):
+    logger.info("tick loop started for run %d", run_id)
+    while True:
+        lock = _get_tick_lock(run_id)
+        lock.acquire()
+        try:
+            _run_tick_for_run(app, run_id)
+        except Exception:
+            logger.exception("tick crashed for run %d", run_id)
+        finally:
+            lock.release()
+
+        with app.app_context():
+            run = db.session.get(Run, run_id)
+            if not run or run.status != "running":
+                break
+            interval = 0 if run.batch_mode else app.config["SIMULATION_TICK_SECONDS"]
+
+        if interval > 0:
+            time.sleep(interval)
+
+    with _run_state_lock:
+        _run_threads.pop(run_id, None)
+    logger.info("tick loop exited for run %d", run_id)
+
+
+def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
     with app.app_context():
-        state = SimState.get()
-        if not state.is_running and not force:
+        run = db.session.get(Run, run_id)
+        if not run:
             return
-        if not state.run_id:
-            state.is_running = False
-            db.session.commit()
+        if not force and run.status != "running":
             return
 
-        run = db.session.get(Run, state.run_id)
-        run_id = state.run_id
+        tick = (run.last_tick or 0) + 1
+        run_id = run.id  # ensure consistent
 
-        # Don't tick a run that's already done
-        if run and run.status in ("completed", "stopped"):
-            state.is_running = False
-            db.session.commit()
-            return
-
-        # Auto-stop when tick_limit reached
-        tick = state.current_tick + 1
-        if run and run.tick_limit and tick > run.tick_limit:
+        # Auto-complete when tick_limit reached
+        if run.tick_limit and tick > run.tick_limit:
             logger.info("run %d tick_limit %d reached — completing", run_id, run.tick_limit)
             from datetime import datetime
             run.status = "completed"
-            run.last_tick = state.current_tick
             if not run.ended_at:
                 run.ended_at = datetime.utcnow()
-            state.is_running = False
             db.session.commit()
-            advance_queue()
             return
 
         logger.info("tick %d starting (run %d)", tick, run_id)
 
-        news_enabled = run.news_enabled if run else True
+        news_enabled = run.news_enabled
 
         all_agents = Agent.query.filter_by(is_active=True, run_id=run_id).all()
         cap = Config.AGENTS_PER_TICK
         agents = all_agents if cap == 0 else random.sample(all_agents, min(cap, len(all_agents)))
         do_ipip = force_ipip or (tick % Config.REASSESSMENT_INTERVAL == 0)
 
-        # Ghost mode — all agents reply to the pinned post this tick, post stays in network
+        # Ghost mode — all agents reply to the pinned post this tick
         ghost_post = None
-        if state.ghost_post_id:
-            gp = db.session.get(Post, state.ghost_post_id)
+        if run.ghost_post_id:
+            gp = db.session.get(Post, run.ghost_post_id)
             if gp:
-                ghost_post = {
-                    "id":      gp.id,
-                    "content": gp.content,
-                }
-                agents = all_agents  # override sample — every agent responds
-                state.ghost_post_id = None  # fire once, then let it influence organically
+                ghost_post = {"id": gp.id, "content": gp.content}
+                agents = all_agents
+                run.ghost_post_id = None  # fire once, then let it influence organically
+                db.session.commit()
                 logger.info("ghost mode — all %d agents replying to post %d", len(agents), gp.id)
 
         # Snapshot data needed by worker threads before we leave the main session
@@ -206,7 +225,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                     # Register any new headlines for semantic analysis
                     if news_context:
                         for h in news_context:
-                            if h.get("url") and not NewsItem.query.filter_by(url=h["url"]).first():
+                            if h.get("url") and not NewsItem.query.filter_by(url=h["url"], run_id=run_id).first():
                                 db.session.add(NewsItem(
                                     run_id=run_id,
                                     url=h["url"], title=h["title"],
@@ -255,9 +274,9 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                     agent.neuroticism       = big_five["N"]
                 logger.info("IPIP done — agent %d tick %d: %s", agent_id, tick, big_five)
 
-        state.current_tick = tick
+        run.last_tick = tick
         db.session.commit()
-        logger.info("tick %d complete", tick)
+        logger.info("tick %d complete (run %d)", tick, run_id)
 
 
 # ── Agent snapshots ───────────────────────────────────────────────────────────

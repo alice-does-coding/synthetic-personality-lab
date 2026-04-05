@@ -3,19 +3,38 @@ import { api } from "./api";
 
 const RunContext = createContext(null);
 
+const VIEWING_KEY = "lurkr_viewing_run_id";
+
 export function RunProvider({ children }) {
   const [runs, setRuns] = useState([]);
-  const [activeRunId, setActiveRunId] = useState(null);
-  const [currentTick, setCurrentTick] = useState(null);
-  const [isRunning, setIsRunning] = useState(false);
+  const [runningRunIds, setRunningRunIds] = useState([]);
+  const [viewingRunId, setViewingRunIdState] = useState(() => {
+    const stored = localStorage.getItem(VIEWING_KEY);
+    return stored ? parseInt(stored, 10) : null;
+  });
+
+  const setViewingRunId = (id) => {
+    setViewingRunIdState(id);
+    if (id != null) localStorage.setItem(VIEWING_KEY, String(id));
+    else localStorage.removeItem(VIEWING_KEY);
+  };
 
   const refresh = useCallback(() => {
     api.listRuns()
-      .then(({ runs, active_run_id, current_tick, is_running }) => {
+      .then(({ runs, running_run_ids }) => {
         setRuns(runs);
-        setActiveRunId(active_run_id ?? null);
-        setCurrentTick(current_tick ?? null);
-        setIsRunning(is_running ?? false);
+        setRunningRunIds(running_run_ids ?? []);
+
+        // Default to most recently started run; keep current selection if still valid
+        setViewingRunIdState(prev => {
+          if (prev && runs.find(r => r.id === prev)) return prev;
+          const started = runs
+            .filter(r => r.started_at)
+            .sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+          const id = started[0]?.id ?? runs[runs.length - 1]?.id ?? null;
+          if (id) localStorage.setItem(VIEWING_KEY, String(id));
+          return id;
+        });
       })
       .catch(() => {});
   }, []);
@@ -26,10 +45,10 @@ export function RunProvider({ children }) {
     return () => clearInterval(id);
   }, [refresh]);
 
-  const activeRun = runs.find(r => r.id === activeRunId) ?? null;
+  const viewingRun = runs.find(r => r.id === viewingRunId) ?? null;
 
   return (
-    <RunContext.Provider value={{ runs, activeRunId, activeRun, currentTick, isRunning, refresh }}>
+    <RunContext.Provider value={{ runs, runningRunIds, viewingRunId, viewingRun, setViewingRunId, refresh }}>
       {children}
     </RunContext.Provider>
   );

@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from auth import require_admin
 from database import db
-from models import Run, SimState
+from models import Run
 
 runs_bp = Blueprint("runs", __name__)
 
@@ -12,33 +12,29 @@ runs_bp = Blueprint("runs", __name__)
 @runs_bp.route("/", methods=["GET"])
 def list_runs():
     from models import PersonalitySnapshot
-    runs = Run.query.order_by(Run.id).all()
-    state = SimState.get()
+    from simulation import get_running_run_ids
 
-    # Real tick count per run from snapshots
-    tick_counts = {
+    runs = Run.query.order_by(Run.id).all()
+    running_ids = get_running_run_ids()
+
+    # Snapshot-based tick floor per run (in case last_tick was reset or not saved)
+    tick_floors = {
         row[0]: row[1]
         for row in db.session.query(
             PersonalitySnapshot.run_id,
             db.func.max(PersonalitySnapshot.tick_number)
         ).group_by(PersonalitySnapshot.run_id).all()
     }
-    # Active run uses live sim tick (more up-to-date than last snapshot)
-    if state.run_id:
-        tick_counts[state.run_id] = state.current_tick
 
     result = []
     for r in runs:
         d = r.to_dict()
-        # Use the best available tick count: live sim > last saved > max snapshot
-        d["tick_count"] = max(tick_counts.get(r.id, 0), r.last_tick)
+        d["tick_count"] = max(tick_floors.get(r.id, 0), r.last_tick or 0)
         result.append(d)
 
     return jsonify({
         "runs": result,
-        "active_run_id": state.run_id,
-        "current_tick": state.current_tick,
-        "is_running": state.is_running,
+        "running_run_ids": running_ids,
     })
 
 
@@ -64,7 +60,7 @@ def create_run():
         model_version=data.get("model_version"),
         news_enabled=data.get("news_enabled", True),
         news_categories=data.get("news_categories"),
-        post_framing=data.get("post_framing", "a entity on a social network"),
+        post_framing=data.get("post_framing", "an entity on a social network"),
         ipip_framing=data.get("ipip_framing", "your recent inner and outer life"),
         seed_distribution=data.get("seed_distribution", "random"),
         persona=data.get("persona"),
@@ -78,7 +74,6 @@ def create_run():
     db.session.add(run)
     db.session.commit()
 
-    from flask import current_app
     app = current_app._get_current_object()
 
     if not app.config.get("TESTING"):
@@ -96,58 +91,31 @@ def create_run():
     return jsonify(run.to_dict()), 201
 
 
-@runs_bp.route("/<int:run_id>/activate", methods=["POST"])
-@require_admin
-def activate_run(run_id):
-    """Manually jump the queue — stop current run and activate this one."""
-    run = Run.query.get_or_404(run_id)
-    state = SimState.get()
-
-    # Save tick position and stop the previously active run
-    if state.run_id and state.run_id != run_id:
-        _save_tick_for_run(state.run_id, state.current_tick)
-        prev = db.session.get(Run, state.run_id)
-        if prev and prev.status == "running":
-            prev.status = "stopped"
-            prev.ended_at = datetime.utcnow()
-
-    state.is_running = False
-    state.run_id = run.id
-    state.current_tick = _max_tick_for_run(run.id)
-    run.status = "running"
-    if not run.started_at:
-        run.started_at = datetime.utcnow()
-    db.session.commit()
-    return jsonify({"ok": True, "active_run_id": run.id, "current_tick": state.current_tick})
-
-
-
 @runs_bp.route("/<int:run_id>/start", methods=["POST"])
 @require_admin
 def start_run(run_id):
-    """Start (or resume) a run without resetting tick position."""
+    """Start or resume a run."""
     run = Run.query.get_or_404(run_id)
-    state = SimState.get()
-    state.run_id = run.id
-    state.is_running = True
+    if run.status in ("seeding", "pending"):
+        return jsonify({"error": "run is not ready to start"}), 409
     run.status = "running"
     run.ended_at = None
     if not run.started_at:
         run.started_at = datetime.utcnow()
     db.session.commit()
-    return jsonify({"ok": True, "active_run_id": run.id, "current_tick": state.current_tick})
+
+    from simulation import start_run_thread
+    start_run_thread(current_app._get_current_object(), run_id)
+    return jsonify({"ok": True, "run_id": run_id})
 
 
 @runs_bp.route("/<int:run_id>/stop", methods=["POST"])
 @require_admin
 def stop_run(run_id):
-    """Pause the sim."""
+    """Stop a run. The tick thread will exit on its next iteration."""
     run = Run.query.get_or_404(run_id)
-    state = SimState.get()
-    _save_tick_for_run(run_id, state.current_tick)
     run.status = "stopped"
     run.ended_at = datetime.utcnow()
-    state.is_running = False
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -157,34 +125,8 @@ def stop_run(run_id):
 def delete_run(run_id):
     """Delete a run and all associated data."""
     run = Run.query.get_or_404(run_id)
-    state = SimState.get()
-
     if run.status == "running":
-        return jsonify({"error": "Cannot delete a running run. Stop it first."}), 409
-
-    # If SimState still points here, clear it
-    if state.run_id == run_id:
-        state.is_running = False
-        state.run_id = None
-        state.current_tick = 0
-
+        return jsonify({"error": "stop the run before deleting"}), 409
     db.session.delete(run)
     db.session.commit()
     return jsonify({"ok": True})
-
-
-def _max_tick_for_run(run_id):
-    from models import PersonalitySnapshot
-    snapshot_max = db.session.query(
-        db.func.max(PersonalitySnapshot.tick_number)
-    ).filter_by(run_id=run_id).scalar() or 0
-    run = db.session.get(Run, run_id)
-    last_tick = run.last_tick if run else 0
-    return max(snapshot_max, last_tick)
-
-
-def _save_tick_for_run(run_id, tick):
-    """Persist current tick position on the run so it survives switching."""
-    run = db.session.get(Run, run_id)
-    if run:
-        run.last_tick = tick

@@ -1,19 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { api } from "../api";
+import { useRun } from "../RunContext";
 
 export default function SimControls() {
-  const [status, setStatus]   = useState(null);
+  const { viewingRunId, runningRunIds, refresh } = useRun();
   const [loading, setLoading] = useState(false);
 
-  const refresh = () => api.simStatus().then(setStatus).catch(() => {});
-
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 5000);
-    return () => clearInterval(id);
-  }, []);
+  const isRunning = runningRunIds.includes(viewingRunId);
 
   const handle = async (action) => {
+    if (!viewingRunId) return;
     setLoading(true);
     try {
       await action();
@@ -23,34 +19,24 @@ export default function SimControls() {
     }
   };
 
+  if (!viewingRunId) return null;
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-      {status && (
-        <span className="muted" style={{ fontSize: 12 }}>
-          tick {status.current_tick}
-        </span>
-      )}
-      {status?.is_running ? (
-        <button className="btn" disabled={loading} onClick={() => handle(api.simStop)}>
-          ⏸ Pause
+      {isRunning ? (
+        <button className="btn" disabled={loading} onClick={() => handle(() => api.stopRun(viewingRunId))}>
+          ⏸ Stop
         </button>
       ) : (
-        <button className="btn primary" disabled={loading} onClick={() => handle(api.simStart)}>
-          ▶ Run
+        <button className="btn primary" disabled={loading} onClick={() => handle(() => api.startRun(viewingRunId))}>
+          ▶ Start
         </button>
       )}
-      <button className="btn" disabled={loading} onClick={() => handle(api.simTick)}>
+      <button className="btn" disabled={loading} onClick={() => handle(() => api.simTick(viewingRunId))}>
         ↪ Tick
       </button>
-      <button className="btn" disabled={loading} onClick={() => handle(api.simAssess)}
-        title={status ? `~${Math.ceil(status.agents_per_tick / status.rate_limit)}s for ${status.agents_per_tick} agents` : ""}
-      >
+      <button className="btn" disabled={loading} onClick={() => handle(() => api.simAssess(viewingRunId))}>
         📊 Assess
-        {status && (
-          <span className="muted" style={{ fontSize: 11, marginLeft: 5 }}>
-            ~{Math.ceil(status.agents_per_tick / status.rate_limit)}s
-          </span>
-        )}
       </button>
     </div>
   );
