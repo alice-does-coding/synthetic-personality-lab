@@ -1,15 +1,14 @@
-.PHONY: setup run stop backend frontend reset
+.PHONY: setup run stop backend frontend reset test
 
 setup:
 	@echo "Setting up backend..."
-	cd backend && python3.11 -m venv venv && . venv/bin/activate && pip install -q -r requirements.txt
+	cd backend && python3.11 -m venv venv && . venv/bin/activate && pip install -q -r requirements.txt -r requirements-dev.txt
 	@if [ ! -f backend/.env ]; then cp backend/.env.example backend/.env && echo "Created backend/.env — add your MISTRAL_API_KEY before running"; fi
-	cd backend && . venv/bin/activate && python3.11 seed.py
 	@echo ""
 	@echo "Setting up frontend..."
 	cd frontend && npm install --silent
 	@echo ""
-	@echo "Done. Run 'make run' to start."
+	@echo "Done. Run 'make run' to start, then create a run at /runs."
 
 run:
 	@echo "Starting backend..."
@@ -23,11 +22,13 @@ backend:
 frontend:
 	cd frontend && npm run dev
 
+test:
+	cd backend && . venv/bin/activate && pytest tests/ -v
+
 reset:
 	@echo "Nuking database..."
 	rm -f backend/instance/lab.db
-	@echo "Reseeding..."
-	cd backend && . venv/bin/activate && python3.11 seed.py
+	@echo "Done. Run 'make run' and create a new run at /runs."
 
 stop:
 	@pkill -f "python3.11 app.py" 2>/dev/null || true

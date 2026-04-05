@@ -40,17 +40,18 @@ def create_app(config_class=Config):
     app.register_blueprint(nlp_bp, url_prefix="/api/nlp")
     app.register_blueprint(runs_bp, url_prefix="/api/runs")
 
-    def _tick_loop():
-        from simulation import run_tick
-        while True:
-            run_tick(app)
-            time.sleep(app.config["SIMULATION_TICK_SECONDS"])
+    if not app.config.get("TESTING"):
+        def _tick_loop():
+            from simulation import run_tick
+            while True:
+                run_tick(app)
+                time.sleep(app.config["SIMULATION_TICK_SECONDS"])
 
-    threading.Thread(target=_tick_loop, daemon=True).start()
+        threading.Thread(target=_tick_loop, daemon=True).start()
 
-    from simulation import start_news_analyzer, start_post_analyzer
-    start_news_analyzer(app)
-    start_post_analyzer(app)
+        from simulation import start_news_analyzer, start_post_analyzer
+        start_news_analyzer(app)
+        start_post_analyzer(app)
 
     return app
 

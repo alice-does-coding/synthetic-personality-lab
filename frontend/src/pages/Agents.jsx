@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useRun } from "../RunContext";
 
 const TRAIT_COLORS = {
   openness:          "#8b5cf6",
@@ -82,17 +83,19 @@ function AgentCard({ agent }) {
 }
 
 export default function Agents() {
+  const { activeRunId } = useRun();
   const [agents, setAgents]   = useState([]);
   const [sort, setSort]       = useState("name");
   const [error, setError]     = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.listAgents()
+    setLoading(true);
+    api.listAgents(activeRunId)
       .then(setAgents)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeRunId]);
 
   const sorted = [...agents].sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name);

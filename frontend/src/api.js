@@ -44,7 +44,7 @@ export const api = {
   sentimentContagion:         (runId) => req(`/news/contagion${runId ? `?run_id=${runId}` : ""}`),
 
   // posts
-  listPosts:  (limit = 50, agentId) => req(`/posts/?limit=${limit}${agentId ? `&agent_id=${agentId}` : ""}`),
+  listPosts:  (limit = 50, agentId, runId) => req(`/posts/?limit=${limit}${agentId ? `&agent_id=${agentId}` : ""}${runId ? `&run_id=${runId}` : ""}`),
   monologue:  (agentId, limit = 100) => req(`/posts/monologue/${agentId}?limit=${limit}`),
   feed:      (agentId, limit = 20) => req(`/posts/feed/${agentId}?limit=${limit}`),
   replies:   (postId)              => req(`/posts/${postId}/replies`),
@@ -53,9 +53,10 @@ export const api = {
 
   // runs
   listRuns:    ()        => req("/runs/"),
+  listPersonas: ()       => req("/runs/personas"),
   createRun:   (body)    => adminReq("/runs/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   activateRun: (id)      => adminReq(`/runs/${id}/activate`, { method: "POST" }),
-  seedRun:     (id)      => adminReq(`/runs/${id}/seed`,     { method: "POST" }),
   startRun:    (id)      => adminReq(`/runs/${id}/start`,    { method: "POST" }),
   stopRun:     (id)      => adminReq(`/runs/${id}/stop`,     { method: "POST" }),
+  deleteRun:   (id)      => adminReq(`/runs/${id}`,          { method: "DELETE" }),
 };

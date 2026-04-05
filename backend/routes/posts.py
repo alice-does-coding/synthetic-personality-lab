@@ -11,9 +11,12 @@ posts_bp = Blueprint("posts", __name__)
 def list_posts():
     limit    = request.args.get("limit", 50, type=int)
     agent_id = request.args.get("agent_id", type=int)
+    run_id   = request.args.get("run_id", type=int)
     query = Post.query.filter_by(is_public=True).order_by(Post.created_at.desc())
     if agent_id:
         query = query.filter_by(agent_id=agent_id)
+    if run_id:
+        query = query.filter_by(run_id=run_id)
     return jsonify([p.to_dict() for p in query.limit(limit).all()])
 
 

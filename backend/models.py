@@ -15,13 +15,27 @@ class Run(db.Model):
     post_framing      = db.Column(db.Text)
     ipip_framing      = db.Column(db.Text)
     seed_distribution = db.Column(db.String(50), default="random")
+    persona           = db.Column(db.String(50), nullable=True)   # null = random
     agent_count       = db.Column(db.Integer)
     tick_limit        = db.Column(db.Integer)
     tick_duration_s   = db.Column(db.Integer)
+    status            = db.Column(db.String(20), nullable=False, default="pending")
+    last_tick         = db.Column(db.Integer, default=0, nullable=False)
+    # pending  — queued, seeding not started
+    # seeding  — agents being generated in background
+    # ready    — seeded, waiting in queue
+    # running  — currently active
+    # completed — hit tick_limit
+    # stopped  — manually stopped
     started_at        = db.Column(db.DateTime)
     ended_at          = db.Column(db.DateTime)
     notes             = db.Column(db.Text)
     created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    agents             = db.relationship("Agent",               backref="run", lazy=True, cascade="all, delete-orphan")
+    news_items         = db.relationship("NewsItem",            backref="run", lazy=True, cascade="all, delete-orphan")
+    personality_snapshots = db.relationship("PersonalitySnapshot", backref="run", lazy=True, cascade="all, delete-orphan")
+    ipip_responses     = db.relationship("IpipResponse",        backref="run", lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -35,9 +49,12 @@ class Run(db.Model):
             "post_framing":      self.post_framing,
             "ipip_framing":      self.ipip_framing,
             "seed_distribution": self.seed_distribution,
+            "persona":           self.persona,
             "agent_count":       self.agent_count,
             "tick_limit":        self.tick_limit,
             "tick_duration_s":   self.tick_duration_s,
+            "status":            self.status,
+            "last_tick":         self.last_tick,
             "started_at":        self.started_at.isoformat() if self.started_at else None,
             "ended_at":          self.ended_at.isoformat() if self.ended_at else None,
             "notes":             self.notes,
@@ -63,21 +80,23 @@ class Agent(db.Model):
     agreeableness = db.Column(db.Float, nullable=True)
     neuroticism = db.Column(db.Float, nullable=True)
 
-    posts = db.relationship("Post", backref="agent", lazy=True)
-    snapshots = db.relationship("PersonalitySnapshot", backref="agent", lazy=True)
-    ipip_responses = db.relationship("IpipResponse", backref="agent", lazy=True)
+    posts = db.relationship("Post", backref="agent", lazy=True, cascade="all, delete-orphan")
+    snapshots = db.relationship("PersonalitySnapshot", backref="agent", lazy=True, cascade="all, delete-orphan")
+    ipip_responses = db.relationship("IpipResponse", backref="agent", lazy=True, cascade="all, delete-orphan")
 
     following = db.relationship(
         "Follow",
         foreign_keys="Follow.follower_id",
         backref=db.backref("follower", lazy=True),
         lazy=True,
+        cascade="all, delete-orphan",
     )
     followers = db.relationship(
         "Follow",
         foreign_keys="Follow.followee_id",
         backref=db.backref("followee", lazy=True),
         lazy=True,
+        cascade="all, delete-orphan",
     )
 
     def to_dict(self):
@@ -122,6 +141,7 @@ class Post(db.Model):
         "Post",
         backref=db.backref("parent", remote_side="Post.id"),
         lazy=True,
+        cascade="all, delete-orphan",
     )
 
     def _thread_count(self):
@@ -247,7 +267,7 @@ class SimState(db.Model):
     __tablename__ = "sim_state"
 
     id = db.Column(db.Integer, primary_key=True)
-    run_id = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False, default=1)
+    run_id = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=True, default=None)
     current_tick = db.Column(db.Integer, default=0, nullable=False)
     is_running = db.Column(db.Boolean, default=False, nullable=False)
     ghost_post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)

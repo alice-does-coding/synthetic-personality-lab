@@ -68,6 +68,27 @@ _tick_running = False
 _tick_lock = threading.Lock()
 
 
+# ── Queue advancement ────────────────────────────────────────────────────────
+
+def advance_queue():
+    """Start the next ready run if nothing is currently running.
+    Must be called within an active app context."""
+    state = SimState.get()
+    if state.is_running:
+        return
+    next_run = Run.query.filter_by(status="ready").order_by(Run.id).first()
+    if not next_run:
+        return
+    from datetime import datetime
+    state.run_id = next_run.id
+    state.current_tick = 0
+    next_run.status = "running"
+    next_run.started_at = datetime.utcnow()
+    state.is_running = True
+    db.session.commit()
+    logger.info("queue advanced — run %d (%s) now running", next_run.id, next_run.name)
+
+
 # ── Public entry point ────────────────────────────────────────────────────────
 
 def run_tick(app, force=False, force_ipip=False):
@@ -92,19 +113,32 @@ def _run_tick_inner(app, force=False, force_ipip=False):
         state = SimState.get()
         if not state.is_running and not force:
             return
+        if not state.run_id:
+            state.is_running = False
+            db.session.commit()
+            return
 
         run = db.session.get(Run, state.run_id)
         run_id = state.run_id
 
+        # Don't tick a run that's already done
+        if run and run.status in ("completed", "stopped"):
+            state.is_running = False
+            db.session.commit()
+            return
+
         # Auto-stop when tick_limit reached
         tick = state.current_tick + 1
         if run and run.tick_limit and tick > run.tick_limit:
-            logger.info("run %d tick_limit %d reached — stopping", run_id, run.tick_limit)
-            state.is_running = False
-            if run and not run.ended_at:
-                from datetime import datetime
+            logger.info("run %d tick_limit %d reached — completing", run_id, run.tick_limit)
+            from datetime import datetime
+            run.status = "completed"
+            run.last_tick = state.current_tick
+            if not run.ended_at:
                 run.ended_at = datetime.utcnow()
+            state.is_running = False
             db.session.commit()
+            advance_queue()
             return
 
         logger.info("tick %d starting (run %d)", tick, run_id)
@@ -118,11 +152,10 @@ def _run_tick_inner(app, force=False, force_ipip=False):
         # Ghost mode — all agents reply to the pinned post this tick, post stays in network
         ghost_post = None
         if state.ghost_post_id:
-            gp = Post.query.get(state.ghost_post_id)
+            gp = db.session.get(Post, state.ghost_post_id)
             if gp:
                 ghost_post = {
                     "id":      gp.id,
-                    "handle":  gp.agent.handle if gp.agent else "ghost",
                     "content": gp.content,
                 }
                 agents = all_agents  # override sample — every agent responds
@@ -272,19 +305,17 @@ def _agent_snapshot(agent, ghost_post=None, news_enabled=True):
         reply_to = ghost_post
     elif feed and random.random() < 0.70:
         target = random.choice(feed)
-        reply_to = {"id": target.id, "handle": target.agent.handle, "content": target.content}
+        reply_to = {"id": target.id, "content": target.content}
 
     return {
         "id":                agent.id,
-        "name":              agent.name,
-        "handle":            agent.handle,
         "bio":               agent.bio,
         "openness":          agent.openness,
         "conscientiousness": agent.conscientiousness,
         "extraversion":      agent.extraversion,
         "agreeableness":     agent.agreeableness,
         "neuroticism":       agent.neuroticism,
-        "feed":     [{"handle": p.agent.handle, "content": p.content} for p in feed],
+        "feed":     [{"content": p.content} for p in feed],
         "reply_to": reply_to,
         # Replies never get headlines. Top-level posts get one 60% of the time — the rest post organically.
         "headlines": [] if (not news_enabled or reply_to or random.random() < 0.4) else get_headlines_for_agent(
@@ -317,16 +348,15 @@ def _mistral_client():
 
 def _build_system_prompt(snap):
     return (
-        f"You are {snap['name']} (@{snap['handle']}), a user on a social media platform.\n\n"
-        f"Bio: {snap['bio'] or 'No bio provided.'}"
+        f"You are an entity on a social network.\n\n"
+        f"About you: {snap['bio'] or 'No description available.'}"
     )
 
 
-
 def _build_ipip_system_prompt(snap):
-    """System prompt for IPIP assessment — name only, no platform framing or bio.
+    """System prompt for IPIP assessment — anonymous, no name/handle contamination.
     The agent must derive its self-assessment purely from its posts and thoughts."""
-    return f"You are {snap['name']} (@{snap['handle']})."
+    return "You are an entity. Assess yourself based only on your recent posts and thoughts."
 
 
 def _regenerate_bio(snap, client):
@@ -338,9 +368,9 @@ def _regenerate_bio(snap, client):
     else:
         context = ""
     prompt = (
-        f"You are {snap['name']} (@{snap['handle']}).\n\n"
+        f"You are an entity on a social network.\n\n"
         f"{context}"
-        "Rewrite your bio in 1–2 sentences."
+        "Rewrite your description in 1–2 sentences."
     )
     resp = _mistral_chat(
         client,
@@ -400,7 +430,7 @@ def _generate_post(snap):
     if snap["reply_to"]:
         # Replies are direct social responses — single generation, always public
         r = snap["reply_to"]
-        user_prompt = f"@{r['handle']}: \"{r['content']}\""
+        user_prompt = f"\"{r['content']}\""
         resp = _mistral_chat(
             client,
             messages=[
@@ -422,7 +452,7 @@ def _generate_post(snap):
         stored_headlines = headlines
         engagement_type = "news"
     elif snap["feed"]:
-        user_prompt = "\n".join(f"@{p['handle']}: {p['content']}" for p in snap["feed"])
+        user_prompt = "\n".join(f'"{p["content"]}"' for p in snap["feed"])
         stored_headlines = None
         engagement_type = "organic"
     else:

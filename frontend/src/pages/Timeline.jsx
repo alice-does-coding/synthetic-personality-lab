@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api";
 import PostCard from "../components/PostCard";
+import { useRun } from "../RunContext";
 
 const TRAITS = [
   { key: "agent_openness",          label: "Openness",          short: "O", color: "#a78bfa" },
@@ -73,6 +74,7 @@ const TICK_WINDOWS = [
 ];
 
 export default function Timeline() {
+  const { activeRunId } = useRun();
   const [posts,      setPosts]      = useState([]);
   const [error,      setError]      = useState(null);
   const [loading,    setLoading]    = useState(true);
@@ -82,11 +84,12 @@ export default function Timeline() {
   const [tickWindow, setTickWindow] = useState(null);
 
   useEffect(() => {
-    api.listPosts(200)
+    setLoading(true);
+    api.listPosts(200, null, activeRunId)
       .then((all) => setPosts(all.filter((p) => p.parent_id === null)))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeRunId]);
 
   if (loading) return <p className="muted" style={{ padding: 20 }}>loading…</p>;
   if (error)   return <p className="error"  style={{ padding: 20 }}>{error}</p>;

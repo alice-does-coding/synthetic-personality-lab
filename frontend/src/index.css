@@ -1,8 +1,10 @@
 :root {
   --text:    #888;
   --text-h:  #000;
+  --text-dim: #bbb;
   --bg:      #fff;
   --border:  #000;
+  --track:   #ddd;
 
   --pink:    #ff3ea5;
   --purple:  #c77dff;
@@ -30,10 +32,12 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --text:   #555;
-    --text-h: #fff;
-    --bg:     #000;
-    --border: #333;
+    --text:    #555;
+    --text-h:  #fff;
+    --text-dim: #444;
+    --bg:      #000;
+    --border:  #333;
+    --track:   #222;
 
     --accent-bg:     rgba(255, 62, 165, 0.1);
     --accent-border: rgba(255, 62, 165, 0.35);
@@ -41,10 +45,12 @@
 }
 
 :root[data-theme="dark"] {
-  --text:   #555;
-  --text-h: #fff;
-  --bg:     #000;
-  --border: #333;
+  --text:    #555;
+  --text-h:  #fff;
+  --text-dim: #444;
+  --bg:      #000;
+  --border:  #333;
+  --track:   #222;
 
   --accent-bg:     rgba(255, 62, 165, 0.1);
   --accent-border: rgba(255, 62, 165, 0.35);

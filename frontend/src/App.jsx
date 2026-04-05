@@ -28,19 +28,29 @@ function useDarkMode() {
 }
 
 function SimStatus() {
-  const { currentTick, isRunning } = useRun();
-  if (currentTick === null) return null;
+  const { activeRun, currentTick, isRunning } = useRun();
+  if (currentTick === null && !activeRun) return null;
   return (
-    <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text)" }}>
-      <span>tick {currentTick ?? "—"}</span>
-      <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+    <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text)", fontFamily: "var(--mono)", minWidth: 0 }}>
+      {activeRun && (
         <span style={{
-          width: 6, height: 6,
-          background: isRunning ? "#2dd4bf" : "var(--text)",
+          color: "var(--text-h)", fontWeight: 700,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          maxWidth: 120,
+        }} title={activeRun.name}>
+          {activeRun.name}
+        </span>
+      )}
+      <span style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
+        t{currentTick ?? "—"}
+        <span style={{
           display: "inline-block",
+          width: 6, height: 6,
+          marginLeft: 6,
+          background: isRunning ? "#2dd4bf" : "var(--text)",
           animation: isRunning ? "pulse 2s ease-in-out infinite" : "none",
+          verticalAlign: "middle",
         }} />
-        {isRunning ? "running" : "stopped"}
       </span>
     </span>
   );
@@ -80,12 +90,8 @@ function Header({ dark, setDark }) {
           <NavLink to="/lab/news" className="subnav-link">News</NavLink>
           <NavLink to="/lab/runs" className="subnav-link">Runs</NavLink>
 
-          {inLab && (
-            <>
-              <span className="nav-divider" />
-              <SimStatus />
-            </>
-          )}
+          <span className="nav-divider" />
+          <SimStatus />
         </nav>
 
         <button

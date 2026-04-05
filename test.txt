@@ -1,0 +1,43 @@
+cd backend && . venv/bin/activate && pytest tests/ -v
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0 -- /Users/aliceott/lurkr/backend/venv/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /Users/aliceott/lurkr/backend
+plugins: flask-1.3.0, anyio-4.13.0
+collecting ... collected 26 items
+
+tests/test_agents.py::test_list_agents_empty PASSED                      [  3%]
+tests/test_agents.py::test_list_agents_scoped_to_run PASSED              [  7%]
+tests/test_agents.py::test_get_agent PASSED                              [ 11%]
+tests/test_agents.py::test_get_agent_not_found PASSED                    [ 15%]
+tests/test_agents.py::test_personality_history_empty PASSED              [ 19%]
+tests/test_agents.py::test_population_drift_empty PASSED                 [ 23%]
+tests/test_queue.py::test_advance_queue_starts_next_ready_run PASSED     [ 26%]
+tests/test_queue.py::test_advance_queue_noop_when_already_running PASSED [ 30%]
+tests/test_queue.py::test_advance_queue_noop_when_no_ready_runs PASSED   [ 34%]
+tests/test_queue.py::test_advance_queue_picks_oldest_ready_run PASSED    [ 38%]
+tests/test_queue.py::test_completed_run_triggers_next PASSED             [ 42%]
+tests/test_runs.py::test_create_run_requires_admin PASSED                [ 46%]
+tests/test_runs.py::test_create_run PASSED                               [ 50%]
+tests/test_runs.py::test_create_run_requires_name PASSED                 [ 53%]
+tests/test_runs.py::test_list_runs_empty PASSED                          [ 57%]
+tests/test_runs.py::test_list_runs_returns_all PASSED                    [ 61%]
+tests/test_runs.py::test_list_runs_includes_status PASSED                [ 65%]
+tests/test_runs.py::test_activate_run PASSED                             [ 69%]
+tests/test_runs.py::test_start_run PASSED                                [ 73%]
+tests/test_runs.py::test_stop_run PASSED                                 [ 76%]
+tests/test_runs.py::test_stop_run_advances_queue PASSED                  [ 80%]
+tests/test_runs.py::test_delete_requires_admin PASSED                    [ 84%]
+tests/test_runs.py::test_delete_stopped_run PASSED                       [ 88%]
+tests/test_runs.py::test_delete_running_run_blocked PASSED               [ 92%]
+tests/test_runs.py::test_delete_last_run_clears_simstate PASSED          [ 96%]
+tests/test_runs.py::test_delete_cascades_agents_and_posts PASSED         [100%]
+
+=============================== warnings summary ===============================
+tests/test_agents.py: 3 warnings
+tests/test_runs.py: 8 warnings
+  /Users/aliceott/lurkr/backend/venv/lib/python3.11/site-packages/flask_sqlalchemy/query.py:30: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    rv = self.get(ident)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 26 passed, 11 warnings in 0.31s ========================
