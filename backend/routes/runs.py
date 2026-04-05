@@ -68,6 +68,8 @@ def create_run():
         tick_limit=data.get("tick_limit"),
         tick_duration_s=data.get("tick_duration_s"),
         batch_mode=data.get("batch_mode", False),
+        ipip_grounded=data.get("ipip_grounded", True),
+        random_seed=data.get("random_seed"),
         notes=data.get("notes"),
         status="seeding",
     )
@@ -84,6 +86,7 @@ def create_run():
         def do_seed():
             with app.app_context():
                 from seed import seed_for_run
+                # pokemon persona overrides num_agents to 151 inside seed_for_run
                 seed_for_run(run_id, num_agents=num)
 
         threading.Thread(target=do_seed, daemon=True).start()

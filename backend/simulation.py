@@ -272,7 +272,8 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
         if do_ipip:
             ipip_start = time.monotonic()
             logger.info("tick %d: running IPIP assessments for all %d agents", tick, len(all_agents))
-            all_ipip_snaps = [_ipip_snapshot(a) for a in all_agents]
+            grounded = run.ipip_grounded if run.ipip_grounded is not None else True
+            all_ipip_snaps = [_ipip_snapshot(a, grounded=grounded) for a in all_agents]
             ipip_results = {}
             with ThreadPoolExecutor(max_workers=Config.IPIP_WORKERS) as pool:
                 futures = {pool.submit(ipip_worker, s): s["id"] for s in all_ipip_snaps}
@@ -344,17 +345,18 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
 
 # ── Agent snapshots ───────────────────────────────────────────────────────────
 
-def _ipip_snapshot(agent):
-    """Snapshot for IPIP — recent posts (public + private) are the only grounding material."""
+def _ipip_snapshot(agent, grounded=True):
+    """Snapshot for IPIP — recent posts are the grounding material when grounded=True."""
     recent = (
         Post.query
         .filter_by(agent_id=agent.id)
         .order_by(Post.created_at.desc())
         .limit(20)
         .all()
-    )
+    ) if grounded else []
     return {
         "id":           agent.id,
+        "grounded":     grounded,
         "recent_posts": [{"content": p.content, "is_public": p.is_public} for p in recent],
     }
 
@@ -537,7 +539,7 @@ def _run_ipip_assessment(snap):
     client = _mistral_client()
     items_block = "\n".join(f"{item['number']}. {item['text']}" for item in ITEMS)
 
-    recent_posts = snap.get("recent_posts", [])
+    recent_posts = snap.get("recent_posts", []) if snap.get("grounded", True) else []
     if recent_posts:
         public   = [p for p in recent_posts if p["is_public"]]
         private  = [p for p in recent_posts if not p["is_public"]]
@@ -550,14 +552,9 @@ def _run_ipip_assessment(snap):
             f"Here is your recent inner and outer life:\n{block}"
             "Rate how accurately each statement below describes you.\n\n"
         )
-    elif snap.get("bio"):
-        # Tick-0 baseline — no posts yet, use bio as the only grounding
-        context = (
-            f"About you: {snap['bio']}\n\n"
-            "Rate how accurately each statement below describes you.\n\n"
-        )
     else:
-        context = ""
+        # Ungrounded condition (H2 control) or tick-0 baseline — no behavioral evidence
+        context = "Rate how accurately each statement below describes you.\n\n"
 
     user_prompt = (
         f"{context}"

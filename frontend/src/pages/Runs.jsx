@@ -160,6 +160,8 @@ const DEFAULTS = {
   model: "mistral-large-latest",
   news_enabled: true,
   batch_mode: true,
+  ipip_grounded: true,
+  random_seed: "",
   agent_framing: "an entity on a social network",
   persona: null,
   agent_count: 50,
@@ -198,6 +200,7 @@ function CreateRunForm({ onCreated, onCancel }) {
         post_framing: form.agent_framing,
         agent_count:  parseInt(form.agent_count) || null,
         tick_limit:   parseInt(form.tick_limit)  || null,
+        random_seed:  form.random_seed !== "" ? parseInt(form.random_seed) : null,
       });
       onCreated(run);
     } catch (e) {
@@ -314,6 +317,24 @@ function CreateRunForm({ onCreated, onCancel }) {
         <Input label="tick limit" value={form.tick_limit} onChange={set("tick_limit")} type="number" placeholder="100" />
       </div>
 
+      {section("experiment")}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <Toggle label="ipip grounded" value={form.ipip_grounded} onChange={set("ipip_grounded")} />
+          <span style={{ ...mono, fontSize: 9, color: "var(--text-dim)", lineHeight: 1.5 }}>
+            {form.ipip_grounded
+              ? "agents see their recent posts before self-assessment (H2 treatment)"
+              : "agents assess themselves without post history (H2 control)"}
+          </span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <Input label="random seed" value={form.random_seed} onChange={set("random_seed")} type="number" placeholder="leave blank for random" />
+          <span style={{ ...mono, fontSize: 9, color: "var(--text-dim)", lineHeight: 1.5 }}>
+            same seed = identical agents across runs. use for matched-pairs.
+          </span>
+        </div>
+      </div>
+
       {section("notes")}
       <Textarea label="notes" value={form.notes} onChange={set("notes")} placeholder="Hypothesis, context, what changed..." rows={3} />
 
@@ -387,6 +408,8 @@ function RunCard({ run, isViewing, isRunning, isAdmin, onView, onStart, onStop, 
         <FIELD label="model" value={run.model} />
         <FIELD label="news" value={run.news_enabled ? "enabled" : "disabled"} color={run.news_enabled ? "#2dd4bf" : "#ff3ea5"} />
         {run.batch_mode && <FIELD label="mode" value="batch" color="#c77dff" />}
+        <FIELD label="ipip" value={run.ipip_grounded !== false ? "grounded" : "ungrounded"} color={run.ipip_grounded !== false ? "#2dd4bf" : "#fb923c"} />
+        {run.random_seed != null && <FIELD label="seed" value={run.random_seed} />}
         <FIELD label="framing" value={run.post_framing} />
         <FIELD label="seed" value={run.seed_distribution} />
         <FIELD label="agents" value={run.agent_count} />

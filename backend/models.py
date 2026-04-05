@@ -20,6 +20,8 @@ class Run(db.Model):
     tick_limit        = db.Column(db.Integer)
     tick_duration_s   = db.Column(db.Integer)
     batch_mode        = db.Column(db.Boolean, default=False, nullable=False)
+    ipip_grounded     = db.Column(db.Boolean, default=True, nullable=False)
+    random_seed       = db.Column(db.Integer, nullable=True)
     ghost_post_id     = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
     status            = db.Column(db.String(20), nullable=False, default="pending")
     last_tick         = db.Column(db.Integer, default=0, nullable=False)
@@ -56,6 +58,8 @@ class Run(db.Model):
             "tick_limit":        self.tick_limit,
             "tick_duration_s":   self.tick_duration_s,
             "batch_mode":        self.batch_mode,
+            "ipip_grounded":     self.ipip_grounded,
+            "random_seed":       self.random_seed,
             "ghost_post_id":     self.ghost_post_id,
             "status":            self.status,
             "last_tick":         self.last_tick,

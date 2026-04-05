@@ -124,42 +124,61 @@ def _sample_score(mean, std):
 def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AGENT):
     """Seed agents for a specific run. Call from within an app context."""
     from models import Run
-    from personas import PERSONAS
+    from personas import PERSONAS, GEN1_POKEMON
 
     run = db.session.get(Run, run_id)
     persona = PERSONAS.get(run.persona) if run and run.persona else None
 
+    # Reproducible seeding when random_seed is set
+    if run.random_seed is not None:
+        random.seed(run.random_seed)
+
+    is_pokemon = (run.persona == "pokemon")
+    if is_pokemon:
+        num_agents = len(GEN1_POKEMON)
+        pokemon_names = list(GEN1_POKEMON)  # already in Pokédex order; respect random_seed shuffle if desired
+
     existing_handles = {a.handle for a in Agent.query.all()}
     existing_names   = {a.name for a in Agent.query.all()}
 
-    # ── Build score configs upfront ──────────────────────────────────────────
+    # ── Build score configs upfront ──────────────────���───────────────────────
     configs = []
-    for _ in range(num_agents):
+    for i in range(num_agents):
         if persona:
             p = persona["priors"]
-            configs.append({
+            cfg = {
                 "o": _sample_score(*p["openness"]),
                 "c": _sample_score(*p["conscientiousness"]),
                 "e": _sample_score(*p["extraversion"]),
                 "a": _sample_score(*p["agreeableness"]),
                 "n": _sample_score(*p["neuroticism"]),
                 "bio_prompt": persona["bio_prompt"],
-            })
+            }
         else:
             scores = _sample_population()
-            configs.append({
+            cfg = {
                 "o": scores["openness"], "c": scores["conscientiousness"],
                 "e": scores["extraversion"], "a": scores["agreeableness"],
                 "n": scores["neuroticism"],
                 "bio_prompt": None,
-            })
+            }
+        if is_pokemon:
+            pname = pokemon_names[i]
+            cfg["name_override"]   = pname
+            cfg["handle_base"]     = pname.lower().replace(" ", "_").replace("-", "_")
+            cfg["bio_framing"]     = f"{pname}, an original Generation 1 Pokémon"
+        configs.append(cfg)
 
-    # ── Generate all bios in parallel ────────────────────────────────────────
+    # ── Generate all bios in parallel ─────────────────���────────────────────��─
     print(f"  Generating {num_agents} agent bios in parallel...")
     bios = [None] * num_agents
     with ThreadPoolExecutor(max_workers=Config.MAX_WORKERS) as pool:
         futures = {
-            pool.submit(_generate_bio, run.post_framing, cfg["bio_prompt"]): i
+            pool.submit(
+                _generate_bio,
+                cfg.get("bio_framing") or run.post_framing,
+                cfg["bio_prompt"]
+            ): i
             for i, cfg in enumerate(configs)
         }
         for future in as_completed(futures):
@@ -174,18 +193,27 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
     # ── Create agents (name/handle collision-safe, sequential) ───────────────
     agents_created = []
     for i, cfg in enumerate(configs):
-        name   = generate_name()
-        handle = generate_handle()
+        if "name_override" in cfg:
+            name = cfg["name_override"]
+            base_handle = cfg["handle_base"]
+            handle = base_handle
+            j = 2
+            while handle in existing_handles:
+                handle = f"{base_handle}{j}"; j += 1
+        else:
+            name   = generate_name()
+            handle = generate_handle()
 
-        base = handle
-        j = 2
-        while handle in existing_handles:
-            handle = f"{base}{j}"; j += 1
+        if "name_override" not in cfg:
+            base = handle
+            j = 2
+            while handle in existing_handles:
+                handle = f"{base}{j}"; j += 1
 
-        base = name
-        j = 2
-        while name in existing_names:
-            name = f"{base}{j}"; j += 1
+            base = name
+            j = 2
+            while name in existing_names:
+                name = f"{base}{j}"; j += 1
 
         existing_handles.add(handle)
         existing_names.add(name)

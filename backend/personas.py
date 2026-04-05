@@ -7,7 +7,47 @@ Each persona defines:
   bio_prompt   — injected into generate_identity to steer the LLM
   priors       — Big Five (mean, std) on a 0–100 scale; scores are sampled
                  from a normal distribution and clamped to [5, 95]
+
+Special persona "pokemon": seeds exactly 151 agents, one per Generation 1
+Pokémon, using each Pokémon's name as the agent's name. Bios are generated
+from the Pokémon's identity. Scores are sampled from population norms.
 """
+
+# All 151 original Generation 1 Pokémon in Pokédex order.
+# Used when persona="pokemon" to assign unique names at seed time.
+GEN1_POKEMON = [
+    "Bulbasaur", "Ivysaur", "Venusaur", "Charmander", "Charmeleon",
+    "Charizard", "Squirtle", "Wartortle", "Blastoise", "Caterpie",
+    "Metapod", "Butterfree", "Weedle", "Kakuna", "Beedrill",
+    "Pidgey", "Pidgeotto", "Pidgeot", "Rattata", "Raticate",
+    "Spearow", "Fearow", "Ekans", "Arbok", "Pikachu",
+    "Raichu", "Sandshrew", "Sandslash", "Nidoran-F", "Nidorina",
+    "Nidoqueen", "Nidoran-M", "Nidorino", "Nidoking", "Clefairy",
+    "Clefable", "Vulpix", "Ninetales", "Jigglypuff", "Wigglytuff",
+    "Zubat", "Golbat", "Oddish", "Gloom", "Vileplume",
+    "Paras", "Parasect", "Venonat", "Venomoth", "Diglett",
+    "Dugtrio", "Meowth", "Persian", "Psyduck", "Golduck",
+    "Mankey", "Primeape", "Growlithe", "Arcanine", "Poliwag",
+    "Poliwhirl", "Poliwrath", "Abra", "Kadabra", "Alakazam",
+    "Machop", "Machoke", "Machamp", "Bellsprout", "Weepinbell",
+    "Victreebel", "Tentacool", "Tentacruel", "Geodude", "Graveler",
+    "Golem", "Ponyta", "Rapidash", "Slowpoke", "Slowbro",
+    "Magnemite", "Magneton", "Farfetchd", "Doduo", "Dodrio",
+    "Seel", "Dewgong", "Grimer", "Muk", "Shellder",
+    "Cloyster", "Gastly", "Haunter", "Gengar", "Onix",
+    "Drowzee", "Hypno", "Krabby", "Kingler", "Voltorb",
+    "Electrode", "Exeggcute", "Exeggutor", "Cubone", "Marowak",
+    "Hitmonlee", "Hitmonchan", "Lickitung", "Koffing", "Weezing",
+    "Rhyhorn", "Rhydon", "Chansey", "Tangela", "Kangaskhan",
+    "Horsea", "Seadra", "Goldeen", "Seaking", "Staryu",
+    "Starmie", "Mr-Mime", "Scyther", "Jynx", "Electabuzz",
+    "Magmar", "Pinsir", "Tauros", "Magikarp", "Gyarados",
+    "Lapras", "Ditto", "Eevee", "Vaporeon", "Jolteon",
+    "Flareon", "Porygon", "Omanyte", "Omastar", "Kabuto",
+    "Kabutops", "Aerodactyl", "Snorlax", "Articuno", "Zapdos",
+    "Moltres", "Dratini", "Dragonair", "Dragonite", "Mewtwo",
+    "Mew",
+]
 
 PERSONAS = {
     "conspiracy-theorist": {
@@ -131,6 +171,19 @@ PERSONAS = {
             "extraversion":      (65, 10),
             "agreeableness":     (15,  8),
             "neuroticism":       (60, 10),
+        },
+    },
+
+    "pokemon": {
+        "label": "Generation 1 Pokémon",
+        "description": "151 original Pokémon, one per agent. Each agent's identity, bio, and behavior emerges from their Pokémon's character. Use agent_count=151.",
+        "bio_prompt": None,  # Bio framing is set per-agent using the Pokémon's name
+        "priors": {          # Population norms — no Pokémon-specific priors
+            "openness":          (60, 20),
+            "conscientiousness": (55, 20),
+            "extraversion":      (50, 22),
+            "agreeableness":     (62, 18),
+            "neuroticism":       (45, 22),
         },
     },
 
