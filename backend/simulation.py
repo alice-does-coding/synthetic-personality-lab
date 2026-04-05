@@ -348,7 +348,6 @@ def _mistral_client():
 
 def _build_system_prompt(snap):
     return (
-        f"You are an entity on a social network.\n\n"
         f"About you: {snap['bio'] or 'No description available.'}"
     )
 
@@ -368,7 +367,6 @@ def _regenerate_bio(snap, client):
     else:
         context = ""
     prompt = (
-        f"You are an entity on a social network.\n\n"
         f"{context}"
         "Rewrite your description in 1–2 sentences."
     )

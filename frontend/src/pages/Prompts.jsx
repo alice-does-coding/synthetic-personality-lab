@@ -5,7 +5,7 @@ const PROMPTS = [
     when: "Every tick when an agent generates a top-level post or reply. Sets the agent's identity and behavioral context.",
     color: "#8b5cf6",
     system: true,
-    template: `You are {name} (@{handle}), a user on a social media platform.
+    template: `You are {name} (@{handle}), an entity on a social network.
 
 Bio: {bio}`,
     notes: "The agent is not told the platform name — for all it knows, it could be Twitter, Reddit, anything. The bio is regenerated from recent posts after each IPIP cycle — it evolves with behavior, not with scores.",

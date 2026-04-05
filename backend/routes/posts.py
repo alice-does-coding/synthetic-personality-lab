@@ -78,18 +78,21 @@ def get_feed(agent_id):
 def create_ghost_post():
     data    = request.get_json()
     content = (data or {}).get("content", "").strip()
+    run_id  = SimState.get().run_id
     if not content:
         return jsonify({"error": "content required"}), 400
 
     # Find or create the reserved ghost agent (inactive — never posts on its own)
     ghost = Agent.query.filter_by(handle="ghost").first()
     if not ghost:
-        ghost = Agent(name="·", handle="ghost", bio="", is_active=False)
+        # TODO: Add run_id here.
+        ghost = Agent(run_id=run_id, name="·", handle="ghost", bio="", is_active=False)
         db.session.add(ghost)
         db.session.flush()
 
     state = SimState.get()
     post  = Post(
+        run_id=run_id,
         agent_id=ghost.id,
         content=content,
         tick_number=state.current_tick,

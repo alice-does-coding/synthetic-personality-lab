@@ -9,6 +9,7 @@ Usage:
 import json
 import random
 import re
+from uuid import UUID
 from app import create_app
 from config import Config
 from database import db
@@ -21,6 +22,24 @@ random.seed(42)
 NUM_AGENTS = 10
 FOLLOWS_PER_AGENT = 5
 
+name_lists =  [
+    "Zyx-7", "Kryo-9", "Nyx-42", "Vexa-X", "Tron-Prime", "Orion-3000",
+    "Quasar-X9", "Nova-77", "Jax-Beta", "Rook-Alpha", "Sylas-Unit",
+    "Dax-Gamma", "Kael-Delta", "Zara-Omega", "Lira-Sigma", "Jett-Lambda",
+    "Kira-Tau", "Riven-Psi", "Sol-Epsilon", "Astra-Mu", "Cassian-Rho",
+    "Bot-22", "Drone-11", "Mech-9", "Robo-3000", "AI-Prime",
+    "Circuit-5", "Titan-8", "Nexus-22", "Zeta-6", "Droid-77",
+    "K-9", "Rust-5", "Nebula-X", "Phantom-4", "Cosmo-13"
+]
+
+handle_adjectives = [
+    "Neon", "Quantum", "Cyber", "Titan", "Aether", "Nebula",
+    "Phantom", "Cosmo", "Stellar", "Lunar", "Orbit", "Nova",
+    "Galaxy", "Rust", "Vex", "Onyx", "Pulse", "Echo", "Void",
+    "Frost", "Blaze", "Zenith", "Aurora", "Spectra", "Pylon"
+]
+
+
 
 def _extract_text(content):
     if content is None:
@@ -30,32 +49,21 @@ def _extract_text(content):
     return "".join(c.text for c in content if isinstance(c, TextChunk))
 
 
-def _trait_description(score, high, low):
-    if score >= 80:
-        return f"very {high}"
-    elif score >= 60:
-        return high
-    elif score >= 40:
-        return f"neither strongly {high} nor {low}"
-    elif score >= 20:
-        return low
-    else:
-        return f"very {low}"
+def generate_name():
+    return random.choice(name_lists)
+
+def generate_handle():
+    handle_adjective = random.choice(handle_adjectives)
+    handle_number = random.randint(100, 999)
+    handle = f"@{handle_adjective.lower()}{handle_number}"
+    return handle
 
 
-def generate_identity(o, c, e, a, n, existing_handles, existing_names, persona_prompt=None):
+def generate_identity(run, existing_handles, existing_names, persona_prompt=None,):
     """Call Mistral to generate a name, handle, and bio from raw scores.
     The entity is not assumed to be human. If persona_prompt is given it
     strongly steers the identity toward that archetype."""
     client = Mistral(api_key=Config.MISTRAL_API_KEY)
-
-    trait_summary = (
-        f"- Openness to experience: {_trait_description(o, 'imaginative and curious', 'practical and conventional')}\n"
-        f"- Conscientiousness: {_trait_description(c, 'organised and disciplined', 'spontaneous and flexible')}\n"
-        f"- Extraversion: {_trait_description(e, 'outgoing and energetic', 'reserved and quiet')}\n"
-        f"- Agreeableness: {_trait_description(a, 'warm and cooperative', 'direct and competitive')}\n"
-        f"- Emotional reactivity: {_trait_description(n, 'emotionally sensitive and reactive', 'calm and stable')}"
-    )
 
     taken_handles = ", ".join(f"@{h}" for h in existing_handles) if existing_handles else "none"
     taken_names = ", ".join(existing_names) if existing_names else "none"
@@ -66,19 +74,11 @@ def generate_identity(o, c, e, a, n, existing_handles, existing_names, persona_p
     ) if persona_prompt else ""
 
     prompt = (
-        "You are creating an identity for an entity on a social media platform called Lurkr. "
-        "The entity is not necessarily human — it could be anything: a person, a bot, an animal, a concept, a process, something stranger. "
-        "Its personality is described below. Let the personality shape what kind of entity it is and how it presents itself online.\n\n"
-        f"{persona_block}"
-        f"Personality:\n{trait_summary}\n\n"
-        "Generate:\n"
-        "1. A display name (1–3 words, can be anything — a word, a phrase, a symbol sequence, a name, a thing)\n"
-        "2. A handle (lowercase, no spaces, no @, under 20 chars, must be unique)\n"
-        "3. A bio (1–2 sentences, first person or whatever voice fits, no personality labels, no Big Five language)\n\n"
-        f"Already taken handles: {taken_handles}\n"
-        f"Already taken names: {taken_names}\n\n"
+        # "You are creating an profile for an entity on a social network.\n"
+        f"You are creating an profile for a {run.post_framing}.\n"
+        "Generate a bio (1–2 sentences, first person or whatever voice fits)\n\n"
         "Return JSON only, no explanation:\n"
-        '{"name": "...", "handle": "...", "bio": "..."}'
+        '{"bio": "..."}'
     )
 
     resp = client.chat.complete(
@@ -92,16 +92,24 @@ def generate_identity(o, c, e, a, n, existing_handles, existing_names, persona_p
     # Strip markdown code fences if present
     raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("` \n")
 
-    data = json.loads(raw)
-    name   = data["name"].strip()
-    handle = re.sub(r"[^a-z0-9_]", "", data["handle"].lower())[:20]
+    data   = json.loads(raw)
     bio    = data["bio"].strip().strip('"')
+
+    name   = generate_name()
+    handle = generate_handle()
 
     # Fallback if handle collides
     base = handle
     i = 2
     while handle in existing_handles:
         handle = f"{base}{i}"
+        i += 1
+
+    # Fallback if name collides
+    base = name
+    i = 2
+    while name in existing_names:
+        name = f"{base}{i}"
         i += 1
 
     return name, handle, bio
@@ -142,7 +150,7 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
             bio_prompt = None
 
         print(f"  [{i+1}/{num_agents}] Generating identity (O:{o} C:{c} E:{e} A:{a} N:{n})...")
-        name, handle, bio = generate_identity(o, c, e, a, n, existing_handles, existing_names, bio_prompt)
+        name, handle, bio = generate_identity(run, existing_handles, existing_names, bio_prompt)
         existing_handles.add(handle)
         existing_names.add(name)
 

@@ -152,7 +152,7 @@ const DEFAULTS = {
   description: "",
   model: "mistral-large-latest",
   news_enabled: true,
-  post_framing: "a user on a social media platform",
+  post_framing: "an entity on a social network",
   ipip_framing: "your recent inner and outer life",
   seed_distribution: "random",
   agent_count: 10,
@@ -220,7 +220,7 @@ function CreateRunForm({ onCreated, onCancel }) {
 
       {section("framing")}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Input label="post system prompt framing" value={form.post_framing} onChange={set("post_framing")} placeholder="a user on a social media platform" />
+        <Input label="post system prompt framing" value={form.post_framing} onChange={set("post_framing")} placeholder="an entity on a social network" />
         <Input label="ipip framing" value={form.ipip_framing} onChange={set("ipip_framing")} placeholder="your recent inner and outer life" />
       </div>
 

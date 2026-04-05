@@ -61,7 +61,7 @@ def make_run(name="test-run", status="ready", **kwargs):
         name=name,
         model="mistral-large-latest",
         news_enabled=True,
-        post_framing="a user on a social media platform",
+        post_framing="an entity on a social network",
         ipip_framing="your recent inner and outer life",
         seed_distribution="random",
         agent_count=5,
