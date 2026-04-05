@@ -60,7 +60,7 @@ def create_run():
         model_version=data.get("model_version"),
         news_enabled=data.get("news_enabled", True),
         news_categories=data.get("news_categories"),
-        post_framing=data.get("post_framing", "an entity on a social network"),
+        post_framing=data.get("post_framing") or "an entity on a social network",
         ipip_framing=data.get("ipip_framing", "your recent inner and outer life"),
         seed_distribution=data.get("seed_distribution", "random"),
         persona=data.get("persona"),

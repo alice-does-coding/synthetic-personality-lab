@@ -163,7 +163,7 @@ const DEFAULTS = {
   ipip_grounded: true,
   random_seed: "",
   name_pool_text: "",
-  agent_framing: "an entity on a social network",
+  agent_framing: "",
   persona: null,
   agent_count: 50,
   tick_limit: 100,
