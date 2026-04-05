@@ -1,5 +1,8 @@
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
-const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY;
+
+function getAdminKey() {
+  return import.meta.env.VITE_ADMIN_KEY || sessionStorage.getItem("lurkr_admin_key") || "";
+}
 
 async function req(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, options);
@@ -8,8 +11,9 @@ async function req(path, options = {}) {
 }
 
 async function adminReq(path, options = {}) {
+  const key = getAdminKey();
   const headers = { ...options.headers };
-  if (ADMIN_KEY) headers["X-Admin-Key"] = ADMIN_KEY;
+  if (key) headers["X-Admin-Key"] = key;
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();

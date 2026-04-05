@@ -9,13 +9,12 @@ Usage:
 import json
 import random
 import re
-from uuid import UUID
 from app import create_app
 from config import Config
 from database import db
 from mistralai.client import Mistral
 from mistralai.client.models import TextChunk
-from models import Agent, Follow
+from models import Agent, Follow, IpipResponse, PersonalitySnapshot
 
 random.seed(42)
 
@@ -55,8 +54,7 @@ def generate_name():
 def generate_handle():
     handle_adjective = random.choice(handle_adjectives)
     handle_number = random.randint(100, 999)
-    handle = f"@{handle_adjective.lower()}{handle_number}"
-    return handle
+    return f"{handle_adjective.lower()}{handle_number}"
 
 
 def generate_identity(run, existing_handles, existing_names, persona_prompt=None,):
@@ -74,10 +72,10 @@ def generate_identity(run, existing_handles, existing_names, persona_prompt=None
     ) if persona_prompt else ""
 
     prompt = (
-        # "You are creating an profile for an entity on a social network.\n"
-        f"You are creating an profile for a {run.post_framing}.\n"
-        "Generate a bio (1–2 sentences, first person or whatever voice fits)\n\n"
-        "Return JSON only, no explanation:\n"
+        f"Write a bio for {run.post_framing}.\n"
+        f"{persona_block}"
+        "Rules: exactly 1-2 sentences, first person, no markdown, no options, no commentary.\n\n"
+        "Return JSON only:\n"
         '{"bio": "..."}'
     )
 
@@ -185,6 +183,50 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
 
     db.session.commit()
     print(f"\nCreated {len(agents_created)} agents for run {run_id}.")
+
+    # ── Tick-0 IPIP baseline ─────────────────────────────────────────────────
+    print("  Running tick-0 IPIP baseline assessments...")
+    from flask import current_app
+    from simulation import _ipip_assessment_isolated
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    app = current_app._get_current_object()
+    ipip_snaps = [{"id": a.id, "bio": a.bio, "recent_posts": []} for a in agents_created]
+    ipip_results = {}
+    with ThreadPoolExecutor(max_workers=Config.IPIP_WORKERS) as pool:
+        futures = {pool.submit(_ipip_assessment_isolated, app, s): s["id"] for s in ipip_snaps}
+        for future in as_completed(futures):
+            agent_id = futures[future]
+            try:
+                ipip_results[agent_id] = future.result()
+            except Exception as e:
+                print(f"  IPIP failed for agent {agent_id}: {e}")
+
+    for agent_id, result in ipip_results.items():
+        if result is None:
+            continue
+        scores, big_five = result
+        for idx, score in enumerate(scores):
+            db.session.add(IpipResponse(
+                run_id=run_id, agent_id=agent_id, tick_number=0,
+                item_number=idx + 1, score=score,
+            ))
+        db.session.add(PersonalitySnapshot(
+            run_id=run_id, agent_id=agent_id, tick_number=0,
+            openness=big_five["O"], conscientiousness=big_five["C"],
+            extraversion=big_five["E"], agreeableness=big_five["A"],
+            neuroticism=big_five["N"],
+        ))
+        agent = db.session.get(Agent, agent_id)
+        if agent:
+            agent.openness          = big_five["O"]
+            agent.conscientiousness = big_five["C"]
+            agent.extraversion      = big_five["E"]
+            agent.agreeableness     = big_five["A"]
+            agent.neuroticism       = big_five["N"]
+        print(f"  agent {agent_id} baseline: {big_five}")
+    db.session.commit()
+    print("  Tick-0 IPIP complete.")
 
     # Mark run ready and start it if nothing else is running
     run = db.session.get(Run, run_id)

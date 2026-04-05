@@ -227,7 +227,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
             for agent_id, result in ipip_results.items():
                 if result is None:
                     continue
-                scores, big_five, new_bio = result
+                scores, big_five = result
                 for idx, score in enumerate(scores):
                     db.session.add(IpipResponse(
                         run_id=run_id,
@@ -241,7 +241,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                     extraversion=big_five["E"], agreeableness=big_five["A"],
                     neuroticism=big_five["N"],
                 ))
-                # Update agent's live scores and bio
+                # Update agent's live scores — bio stays frozen from seed
                 agent = db.session.get(Agent, agent_id)
                 if agent:
                     agent.openness          = big_five["O"]
@@ -249,9 +249,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
                     agent.extraversion      = big_five["E"]
                     agent.agreeableness     = big_five["A"]
                     agent.neuroticism       = big_five["N"]
-                    agent.bio               = new_bio
                 logger.info("IPIP done — agent %d tick %d: %s", agent_id, tick, big_five)
-                logger.info("bio updated — agent %d: %s", agent_id, new_bio)
 
         state.current_tick = tick
         db.session.commit()
@@ -261,7 +259,7 @@ def _run_tick_inner(app, force=False, force_ipip=False):
 # ── Agent snapshots ───────────────────────────────────────────────────────────
 
 def _ipip_snapshot(agent):
-    """Lightweight snapshot for IPIP — includes all recent thoughts (public + private) for grounding."""
+    """Snapshot for IPIP — recent posts (public + private) are the only grounding material."""
     recent = (
         Post.query
         .filter_by(agent_id=agent.id)
@@ -270,16 +268,8 @@ def _ipip_snapshot(agent):
         .all()
     )
     return {
-        "id":                agent.id,
-        "name":              agent.name,
-        "handle":            agent.handle,
-        "bio":               agent.bio,
-        "openness":          agent.openness,
-        "conscientiousness": agent.conscientiousness,
-        "extraversion":      agent.extraversion,
-        "agreeableness":     agent.agreeableness,
-        "neuroticism":       agent.neuroticism,
-        "recent_posts":      [{"content": p.content, "is_public": p.is_public} for p in recent],
+        "id":           agent.id,
+        "recent_posts": [{"content": p.content, "is_public": p.is_public} for p in recent],
     }
 
 
@@ -355,28 +345,7 @@ def _build_system_prompt(snap):
 def _build_ipip_system_prompt(snap):
     """System prompt for IPIP assessment — anonymous, no name/handle contamination.
     The agent must derive its self-assessment purely from its posts and thoughts."""
-    return "You are an entity. Assess yourself based only on your recent posts and thoughts."
-
-
-def _regenerate_bio(snap, client):
-    """Regenerate the agent's bio from recent posts — no scores, purely behavioral."""
-    recent = snap.get("recent_posts", [])
-    if recent:
-        posts_block = "\n".join(f'- "{p["content"]}"' for p in recent)
-        context = f"Here are your recent posts and thoughts:\n{posts_block}\n\n"
-    else:
-        context = ""
-    prompt = (
-        f"{context}"
-        "Rewrite your description in 1–2 sentences."
-    )
-    resp = _mistral_chat(
-        client,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=100,
-        temperature=0.9,
-    )
-    return _extract_text(resp.choices[0].message.content).strip().strip('"')
+    return "Assess yourself based only on your recent posts and thoughts."
 
 
 def _generate_thoughts(snap, client, user_prompt, n):
@@ -491,6 +460,12 @@ def _run_ipip_assessment(snap):
             f"Here is your recent inner and outer life:\n{block}"
             "Rate how accurately each statement below describes you.\n\n"
         )
+    elif snap.get("bio"):
+        # Tick-0 baseline — no posts yet, use bio as the only grounding
+        context = (
+            f"About you: {snap['bio']}\n\n"
+            "Rate how accurately each statement below describes you.\n\n"
+        )
     else:
         context = ""
 
@@ -515,8 +490,7 @@ def _run_ipip_assessment(snap):
     if scores is None:
         return None
     big_five = score_responses({i + 1: scores[i] for i in range(len(scores))})
-    new_bio = _regenerate_bio(snap, client)
-    return scores, big_five, new_bio
+    return scores, big_five
 
 
 def _parse_ipip_response(raw, agent_id):

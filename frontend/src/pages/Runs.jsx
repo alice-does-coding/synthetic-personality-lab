@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "../api";
 import { useRun } from "../RunContext";
+import { useAdmin } from "../AdminContext";
 
 const mono = { fontFamily: "var(--mono)" };
 
@@ -281,7 +282,7 @@ const STATUS_STYLE = {
   stopped:   { color: "var(--text-dim)", label: "stopped" },
 };
 
-function RunCard({ run, isActive, isRunning, queuePos, onActivate, onStart, onStop, onDeleteRequest }) {
+function RunCard({ run, isActive, isRunning, isAdmin, queuePos, onActivate, onStart, onStop, onDeleteRequest }) {
   const progress = run.tick_limit ? Math.min(100, Math.round((run.tick_count ?? 0) / run.tick_limit * 100)) : null;
   const st = STATUS_STYLE[run.status] ?? STATUS_STYLE.stopped;
   const borderColor = isActive ? "#2dd4bf" : "var(--border)";
@@ -337,39 +338,42 @@ function RunCard({ run, isActive, isRunning, queuePos, onActivate, onStart, onSt
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          {/* Active run: start or stop depending on whether sim is ticking */}
-          {isActive && run.status !== "completed" && run.status !== "seeding" && run.status !== "pending" && (
-            isRunning ? (
-              <button onClick={() => onStop(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #fb7185", background: "var(--bg)", color: "#fb7185" }}>
-                stop
+      {isAdmin && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            {/* Active run: start or stop depending on whether sim is ticking */}
+            {isActive && run.status !== "completed" && run.status !== "seeding" && run.status !== "pending" && (
+              isRunning ? (
+                <button onClick={() => onStop(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #fb7185", background: "var(--bg)", color: "#fb7185" }}>
+                  stop
+                </button>
+              ) : (
+                <button onClick={() => onStart(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #2dd4bf", background: "var(--bg)", color: "#2dd4bf" }}>
+                  start
+                </button>
+              )
+            )}
+            {/* Inactive run: offer to activate (loads it as the active run) */}
+            {!isActive && (run.status === "stopped" || run.status === "ready" || run.status === "completed") && (
+              <button onClick={() => onActivate(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #fb923c", background: "var(--bg)", color: "#fb923c" }}>
+                {run.status === "ready" ? "jump queue" : "activate"}
               </button>
-            ) : (
-              <button onClick={() => onStart(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #2dd4bf", background: "var(--bg)", color: "#2dd4bf" }}>
-                start
-              </button>
-            )
-          )}
-          {/* Inactive run: offer to activate (loads it as the active run) */}
-          {!isActive && (run.status === "stopped" || run.status === "ready" || run.status === "completed") && (
-            <button onClick={() => onActivate(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #fb923c", background: "var(--bg)", color: "#fb923c" }}>
-              {run.status === "ready" ? "jump queue" : "activate"}
+            )}
+          </div>
+          {(!isRunning || !isActive) && (
+            <button onClick={() => onDeleteRequest(run)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 10px", cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text-dim)" }}>
+              delete
             </button>
           )}
         </div>
-        {!isRunning || !isActive ? (
-          <button onClick={() => onDeleteRequest(run)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 10px", cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text-dim)" }}>
-            delete
-          </button>
-        ) : null}
-      </div>
+      )}
     </div>
   );
 }
 
 export default function Runs() {
   const { runs, activeRunId, isRunning, refresh } = useRun();
+  const { isAdmin } = useAdmin();
   const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null); // run object | null
 
@@ -437,7 +441,7 @@ export default function Runs() {
           <span style={{ ...mono, fontSize: 10, color: "var(--text-dim)" }}>
             {runs.length} run{runs.length !== 1 ? "s" : ""}
           </span>
-          {!creating && (
+          {isAdmin && !creating && (
             <button
               onClick={() => setCreating(true)}
               style={{
@@ -466,6 +470,7 @@ export default function Runs() {
             run={run}
             isActive={run.id === activeRunId}
             isRunning={isRunning && run.id === activeRunId}
+            isAdmin={isAdmin}
             queuePos={queued.includes(run) ? queued.indexOf(run) + 1 : null}
             onActivate={handleActivate}
             onStart={handleStart}

@@ -8,6 +8,33 @@ const TRAITS = [
   { key: "neuroticism",       short: "N", color: "#ef4444", label: "Neuroticism" },
 ];
 
+const LIFECYCLE = [
+  {
+    title: "Identity",
+    body: "A bio is written by the model from the run's framing prompt — one to two sentences, first person. Name and handle are assigned from predefined lists and carry no semantic meaning.",
+  },
+  {
+    title: "Tick-0 IPIP baseline",
+    body: "Before any posts exist, the agent reads its own bio and completes the full 120-item IPIP-NEO assessment. The resulting Big Five scores replace the seeded values. This snapshot is the true starting point for all drift measurement.",
+  },
+  {
+    title: "Follow graph",
+    body: "Each agent follows a random sample of peers within the run. This determines whose posts appear in their feed. The graph is fixed for the lifetime of the run.",
+  },
+  {
+    title: "Tick loop",
+    body: "On each tick a subset of agents is sampled. Each reads their feed, decides whether to reply or post top-level, generates several thoughts, selects one to publish, and stores the rest as inner monologue. If news is enabled, top-level posts have a 60% chance of being stimulated by a headline.",
+  },
+  {
+    title: "IPIP reassessment",
+    body: "Every ten ticks all active agents retake the IPIP, now grounded in their twenty most recent posts and private thoughts. Big Five scores update. A new personality snapshot is recorded. The bio never changes.",
+  },
+  {
+    title: "Completion",
+    body: "When the run's tick limit is reached the agent is frozen. Scores and bio are preserved as they were at the last assessment tick. The final personality snapshot is the endpoint of the drift curve.",
+  },
+];
+
 const SPEC = [
   ["model",        "mistral-large-latest"],
   ["instrument",   "IPIP-NEO-120"],
@@ -72,7 +99,7 @@ export default function About() {
         <div className="card">
           <div className="page-title" style={{ marginBottom: 8, color: "var(--fuchsia, #e879f9)" }}>the loop</div>
           <p style={{ fontSize: 12, lineHeight: 1.8, color: "var(--text-h)", margin: 0 }}>
-            Agents post. They read news. They reply to each other. Every few ticks they complete the IPIP. Their scores update. Their bio rewrites itself from their behavior. The loop repeats indefinitely.
+            Agents post. They read news. They reply to each other. Every ten ticks they retake the IPIP and their scores update. The bio is fixed from birth — only behavior changes.
           </p>
         </div>
         <div className="card">
@@ -83,9 +110,36 @@ export default function About() {
         </div>
       </div>
 
+      {/* Agent lifecycle */}
+      <div style={{ marginBottom: 32 }}>
+        <div className="page-title" style={{ marginBottom: 12 }}>agent lifecycle</div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {LIFECYCLE.map((step, i) => (
+            <div key={i} style={{
+              display: "flex", gap: 16,
+              padding: "12px 0",
+              borderBottom: i < LIFECYCLE.length - 1 ? "1px solid var(--border)" : "none",
+            }}>
+              <span style={{
+                fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700,
+                color: "var(--pink)", width: 16, flexShrink: 0, paddingTop: 1,
+              }}>{i + 1}</span>
+              <div>
+                <div style={{
+                  fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
+                  textTransform: "uppercase", letterSpacing: "0.1em",
+                  color: "var(--text-h)", marginBottom: 4,
+                }}>{step.title}</div>
+                <div style={{ fontSize: 12, lineHeight: 1.75, color: "var(--text)" }}>{step.body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Prompts link */}
       <div style={{ marginBottom: 32 }}>
-        <Link to="/social/prompts" target="_blank" rel="noopener noreferrer" style={{
+        <Link to="/social/prompts" style={{
           display: "inline-flex", alignItems: "center", gap: 8,
           fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700,
           textTransform: "uppercase", letterSpacing: "0.08em",
