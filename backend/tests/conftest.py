@@ -1,7 +1,7 @@
 import pytest
 from app import create_app
 from database import db as _db
-from models import Run, Agent, Follow, SimState
+from models import Run, Agent, Follow
 
 
 class TestConfig:

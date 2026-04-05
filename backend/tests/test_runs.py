@@ -1,6 +1,5 @@
-import json
 import pytest
-from models import Run, SimState
+from models import Run
 from tests.conftest import make_run, make_agent
 from database import db
 
@@ -44,7 +43,7 @@ def test_list_runs_empty(client):
     assert res.status_code == 200
     data = res.get_json()
     assert data["runs"] == []
-    assert data["active_run_id"] is None
+    assert data["running_run_ids"] == []
 
 
 def test_list_runs_returns_all(client, app):
@@ -70,38 +69,11 @@ def test_list_runs_includes_status(client, app):
     assert run["status"] == "running"
 
 
-# ── Activate ──────────────────────────────────────────────────────────────────
-
-def test_activate_run(admin, app):
-    with app.app_context():
-        r1 = make_run("run-1", status="running")
-        r2 = make_run("run-2", status="ready")
-        state = SimState.get()
-        state.run_id = r1.id
-        state.is_running = True
-        db.session.commit()
-        r1_id, r2_id = r1.id, r2.id
-
-    res = admin.post(f"/api/runs/{r2_id}/activate")
-    assert res.status_code == 200
-
-    with app.app_context():
-        state = SimState.get()
-        assert state.run_id == r2_id
-        assert state.is_running is False
-        r1 = db.session.get(Run, r1_id)
-        assert r1.status == "stopped"
-        r2 = db.session.get(Run, r2_id)
-        assert r2.status == "running"
-
-
 # ── Start / Stop ──────────────────────────────────────────────────────────────
 
 def test_start_run(admin, app):
     with app.app_context():
-        run = make_run("run-x", status="running")
-        state = SimState.get()
-        state.run_id = run.id
+        run = make_run("run-x", status="ready")
         db.session.commit()
         run_id = run.id
 
@@ -109,17 +81,23 @@ def test_start_run(admin, app):
     assert res.status_code == 200
 
     with app.app_context():
-        state = SimState.get()
-        assert state.is_running is True
-        assert state.run_id == run_id
+        run = db.session.get(Run, run_id)
+        assert run.status == "running"
+
+
+def test_start_run_requires_admin(client, app):
+    with app.app_context():
+        run = make_run("run-x", status="ready")
+        db.session.commit()
+        run_id = run.id
+
+    res = client.post(f"/api/runs/{run_id}/start")
+    assert res.status_code == 401
 
 
 def test_stop_run(admin, app):
     with app.app_context():
         run = make_run("run-y", status="running")
-        state = SimState.get()
-        state.run_id = run.id
-        state.is_running = True
         db.session.commit()
         run_id = run.id
 
@@ -127,31 +105,23 @@ def test_stop_run(admin, app):
     assert res.status_code == 200
 
     with app.app_context():
-        state = SimState.get()
-        assert state.is_running is False
         run = db.session.get(Run, run_id)
         assert run.status == "stopped"
 
 
-def test_stop_run_does_not_advance_queue(admin, app):
-    """Stopping a run should not auto-start the next queued run."""
+def test_stop_run_does_not_affect_other_runs(admin, app):
+    """Stopping one run should leave other runs untouched."""
     with app.app_context():
         r1 = make_run("run-active", status="running")
-        r2 = make_run("run-next", status="ready")
-        make_agent(r2.id, "agent1")
-        state = SimState.get()
-        state.run_id = r1.id
-        state.is_running = True
+        r2 = make_run("run-other", status="running")
         db.session.commit()
         r1_id, r2_id = r1.id, r2.id
 
     admin.post(f"/api/runs/{r1_id}/stop")
 
     with app.app_context():
-        state = SimState.get()
-        assert state.is_running is False
         r2 = db.session.get(Run, r2_id)
-        assert r2.status == "ready"  # untouched
+        assert r2.status == "running"
 
 
 # ── Delete ────────────────────────────────────────────────────────────────────
@@ -182,9 +152,6 @@ def test_delete_stopped_run(admin, app):
 def test_delete_running_run_blocked(admin, app):
     with app.app_context():
         run = make_run("live", status="running")
-        state = SimState.get()
-        state.run_id = run.id
-        state.is_running = True
         db.session.commit()
         run_id = run.id
 
@@ -193,25 +160,6 @@ def test_delete_running_run_blocked(admin, app):
 
     with app.app_context():
         assert db.session.get(Run, run_id) is not None
-
-
-def test_delete_last_run_clears_simstate(admin, app):
-    """Deleting the only run should null out SimState.run_id."""
-    with app.app_context():
-        run = make_run("only-run", status="completed")
-        state = SimState.get()
-        state.run_id = run.id
-        state.is_running = False
-        db.session.commit()
-        run_id = run.id
-
-    res = admin.delete(f"/api/runs/{run_id}")
-    assert res.status_code == 200
-
-    with app.app_context():
-        assert db.session.get(Run, run_id) is None
-        state = SimState.get()
-        assert state.run_id is None
 
 
 def test_delete_cascades_agents_and_posts(admin, app):

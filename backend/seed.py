@@ -256,13 +256,15 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
     return agents_created
 
 
-def seed():
+def seed(run_id):
     app = create_app()
     with app.app_context():
-        from models import SimState
-        state = SimState.get()
-        seed_for_run(state.run_id)
+        seed_for_run(run_id)
 
 
 if __name__ == "__main__":
-    seed()
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python seed.py <run_id>")
+        sys.exit(1)
+    seed(int(sys.argv[1]))
