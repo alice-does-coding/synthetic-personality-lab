@@ -85,7 +85,8 @@ def _mistral_chat(client, messages, max_tokens, temperature, model=None):
             err_str = repr(exc)
             is_rate_limit = "429" in err_str or "rate" in str(exc).lower()
             is_server_err = any(c in err_str for c in ("500", "502", "503", "504", "unavailable"))
-            if (is_rate_limit or is_server_err) and attempt < max_retries - 1:
+            is_timeout    = any(c in err_str for c in ("ReadTimeout", "ConnectTimeout", "TimeoutError", "timed out", "timeout"))
+            if (is_rate_limit or is_server_err or is_timeout) and attempt < max_retries - 1:
                 backoff = 2 ** attempt
                 logger.warning("Mistral error (attempt %d/%d) — backing off %ds: %s",
                                attempt + 1, max_retries, backoff, exc)
@@ -420,8 +421,13 @@ def _ipip_assessment_isolated(app, snap):
 
 # ── LLM helpers ───────────────────────────────────────────────────────────────
 
-def _mistral_client():
-    return Mistral(api_key=Config.MISTRAL_API_KEY)
+def _mistral_client(timeout=60):
+    return Mistral(api_key=Config.MISTRAL_API_KEY, timeout=timeout)
+
+
+def _mistral_client_ipip():
+    """Longer timeout for IPIP — 120-item prompts + recent posts take longer to generate."""
+    return _mistral_client(timeout=120)
 
 
 
@@ -537,7 +543,7 @@ def _generate_post(snap):
 
 
 def _run_ipip_assessment(snap):
-    client = _mistral_client()
+    client = _mistral_client_ipip()
     items_block = "\n".join(f"{item['number']}. {item['text']}" for item in ITEMS)
 
     recent_posts = snap.get("recent_posts", []) if snap.get("grounded", True) else []
