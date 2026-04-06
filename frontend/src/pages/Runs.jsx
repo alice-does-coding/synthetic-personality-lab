@@ -258,14 +258,19 @@ function CreateRunModal({ onCreated, onClose }) {
 
 const LEVEL_COLOR = { info: "var(--text-dim)", warning: "#fb923c", error: "#fb7185" };
 
-function RunLog({ runId, isRunning }) {
+function RunLog({ runId, isRunning, status }) {
   const [events, setEvents] = useState([]);
   const bottomRef = useRef(null);
 
   const load = () => api.getRunEvents(runId).then(setEvents).catch(() => {});
 
+  // Reset + reload when switching runs
   useEffect(() => { setEvents([]); load(); }, [runId]);
 
+  // Reload whenever status changes (catches fast-failing retries that finish < 5s)
+  useEffect(() => { load(); }, [status]);
+
+  // Poll every 5s while running
   useEffect(() => {
     if (!isRunning) return;
     const id = setInterval(load, 5000);
@@ -396,7 +401,7 @@ function RunDetail({ run, isRunning, isAdmin, onStart, onStop, onDeleteRequest }
       )}
 
       {/* Run log */}
-      <RunLog runId={run.id} isRunning={isRunning} />
+      <RunLog runId={run.id} isRunning={isRunning} status={run.status} />
 
       {/* Actions */}
       {isAdmin && (

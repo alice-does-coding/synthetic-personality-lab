@@ -130,14 +130,20 @@ def start_run(run_id):
     run = Run.query.get_or_404(run_id)
     if run.status in ("seeding", "pending"):
         return jsonify({"error": "run is not ready to start"}), 409
+    prev_status = run.status
     run.status = "running"
     run.ended_at = None
     if not run.started_at:
         run.started_at = datetime.utcnow()
     db.session.commit()
 
-    from simulation import start_run_thread
-    start_run_thread(current_app._get_current_object(), run_id)
+    app = current_app._get_current_object()
+    from simulation import log_event, start_run_thread
+    if prev_status == "failed":
+        log_event(app, run_id, "info", f"Retry initiated (previous status: {prev_status})")
+    elif prev_status == "stopped":
+        log_event(app, run_id, "info", "Run resumed")
+    start_run_thread(app, run_id)
     return jsonify({"ok": True, "run_id": run_id})
 
 
