@@ -40,11 +40,11 @@ class Run(db.Model):
     notes             = db.Column(db.Text)
     created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    agents             = db.relationship("Agent",               backref="run", lazy=True, cascade="all, delete-orphan")
-    news_items         = db.relationship("NewsItem",            backref="run", lazy=True, cascade="all, delete-orphan")
-    personality_snapshots = db.relationship("PersonalitySnapshot", backref="run", lazy=True, cascade="all, delete-orphan")
-    ipip_responses     = db.relationship("IpipResponse",        backref="run", lazy=True, cascade="all, delete-orphan")
-    events             = db.relationship("RunEvent",            backref="run", lazy=True, cascade="all, delete-orphan", order_by="RunEvent.id")
+    agents             = db.relationship("Agent",               backref="run", lazy="select", cascade="all, delete-orphan")
+    news_items         = db.relationship("NewsItem",            backref="run", lazy="select", cascade="all, delete-orphan")
+    personality_snapshots = db.relationship("PersonalitySnapshot", backref="run", lazy="select", cascade="all, delete-orphan")
+    ipip_responses     = db.relationship("IpipResponse",        backref="run", lazy="select", cascade="all, delete-orphan")
+    events             = db.relationship("RunEvent",            backref="run", lazy="select", cascade="all, delete-orphan", order_by="RunEvent.id")
 
     def to_dict(self):
         return {
@@ -97,22 +97,22 @@ class Agent(db.Model):
     agreeableness = db.Column(db.Float, nullable=True)
     neuroticism = db.Column(db.Float, nullable=True)
 
-    posts = db.relationship("Post", backref="agent", lazy=True, cascade="all, delete-orphan")
-    snapshots = db.relationship("PersonalitySnapshot", backref="agent", lazy=True, cascade="all, delete-orphan")
-    ipip_responses = db.relationship("IpipResponse", backref="agent", lazy=True, cascade="all, delete-orphan")
+    posts = db.relationship("Post", backref="agent", lazy="select", cascade="all, delete-orphan")
+    snapshots = db.relationship("PersonalitySnapshot", backref="agent", lazy="select", cascade="all, delete-orphan")
+    ipip_responses = db.relationship("IpipResponse", backref="agent", lazy="select", cascade="all, delete-orphan")
 
     following = db.relationship(
         "Follow",
         foreign_keys="Follow.follower_id",
-        backref=db.backref("follower", lazy=True),
-        lazy=True,
+        backref=db.backref("follower", lazy="select"),
+        lazy="select",
         cascade="all, delete-orphan",
     )
     followers = db.relationship(
         "Follow",
         foreign_keys="Follow.followee_id",
-        backref=db.backref("followee", lazy=True),
-        lazy=True,
+        backref=db.backref("followee", lazy="select"),
+        lazy="select",
         cascade="all, delete-orphan",
     )
 
@@ -168,7 +168,7 @@ class Post(db.Model):
     replies = db.relationship(
         "Post",
         backref=db.backref("parent", remote_side="Post.id"),
-        lazy=True,
+        lazy="select",
         cascade="all, delete-orphan",
     )
 
