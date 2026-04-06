@@ -26,12 +26,14 @@ class Run(db.Model):
     ghost_post_id     = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
     status            = db.Column(db.String(20), nullable=False, default="pending")
     last_tick         = db.Column(db.Integer, default=0, nullable=False)
-    # pending  — queued, seeding not started
-    # seeding  — agents being generated in background
-    # ready    — seeded, waiting in queue
-    # running  — currently active
+    # pending   — queued, seeding not started
+    # seeding   — agents being generated in background
+    # ready     — seeded, waiting in queue
+    # running   — currently active
     # completed — hit tick_limit
-    # stopped  — manually stopped
+    # stopped   — manually stopped
+    # failed    — halted due to data quality failure (see error field)
+    error             = db.Column(db.Text, nullable=True)
     started_at        = db.Column(db.DateTime)
     ended_at          = db.Column(db.DateTime)
     notes             = db.Column(db.Text)
@@ -65,6 +67,7 @@ class Run(db.Model):
             "ghost_post_id":     self.ghost_post_id,
             "status":            self.status,
             "last_tick":         self.last_tick,
+            "error":             self.error,
             "started_at":        self.started_at.isoformat() if self.started_at else None,
             "ended_at":          self.ended_at.isoformat() if self.ended_at else None,
             "notes":             self.notes,

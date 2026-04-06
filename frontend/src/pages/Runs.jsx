@@ -11,6 +11,7 @@ const DELETE_MESSAGES = {
   ready:     { warning: "This run is seeded and waiting in the queue.",             action: "Delete" },
   completed: { warning: "This run has completed.",                                  action: "Delete" },
   stopped:   { warning: "This run was manually stopped.",                           action: "Delete" },
+  failed:    { warning: "This run failed due to a data quality error.",             action: "Delete" },
 };
 
 function DeleteDialog({ run, onConfirm, onCancel }) {
@@ -395,6 +396,7 @@ const STATUS_STYLE = {
   running:   { color: "#2dd4bf",  label: "running" },
   completed: { color: "var(--text-dim)", label: "completed" },
   stopped:   { color: "var(--text-dim)", label: "stopped" },
+  failed:    { color: "#fb7185",  label: "failed" },
 };
 
 function RunCard({ run, isViewing, isRunning, isAdmin, onView, onStart, onStop, onDeleteRequest }) {
@@ -454,6 +456,12 @@ function RunCard({ run, isViewing, isRunning, isAdmin, onView, onStart, onStop, 
             <div style={{ height: 2, width: `${progress}%`, background: isRunning ? "#2dd4bf" : "var(--text-dim)" }} />
           </div>
           <span style={{ ...mono, fontSize: 9, color: "var(--text-dim)" }}>{progress}% complete</span>
+        </div>
+      )}
+
+      {run.error && (
+        <div style={{ ...mono, borderTop: "1px solid #fb7185", paddingTop: 12, fontSize: 11, color: "#fb7185", lineHeight: 1.6 }}>
+          {run.error}
         </div>
       )}
 
