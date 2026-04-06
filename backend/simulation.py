@@ -236,6 +236,10 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent_id = futures[future]
                     try:
                         post_results[agent_id] = future.result()
+                    except (TypeError, AttributeError) as exc:
+                        # Programming error — not a transient API failure. Stop the run.
+                        logger.critical("post generation fatal error for agent %d — halting run %d: %s", agent_id, run_id, exc)
+                        raise
                     except Exception:
                         logger.exception("post generation failed for agent %d", agent_id)
             post_gen_s = time.monotonic() - phase_start
@@ -282,6 +286,9 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent_id = futures[future]
                     try:
                         ipip_results[agent_id] = future.result()
+                    except (TypeError, AttributeError) as exc:
+                        logger.critical("IPIP assessment fatal error for agent %d — halting run %d: %s", agent_id, run_id, exc)
+                        raise
                     except Exception as exc:
                         logger.error("IPIP assessment failed for agent %d: %s: %s",
                                      agent_id, type(exc).__name__, exc)
@@ -421,13 +428,13 @@ def _ipip_assessment_isolated(app, snap):
 
 # ── LLM helpers ───────────────────────────────────────────────────────────────
 
-def _mistral_client(timeout=60):
-    return Mistral(api_key=Config.MISTRAL_API_KEY, timeout=timeout)
+def _mistral_client(timeout_s=60):
+    return Mistral(api_key=Config.MISTRAL_API_KEY, timeout_ms=timeout_s * 1000)
 
 
 def _mistral_client_ipip():
     """Longer timeout for IPIP — 120-item prompts + recent posts take longer to generate."""
-    return _mistral_client(timeout=120)
+    return _mistral_client(timeout_s=120)
 
 
 

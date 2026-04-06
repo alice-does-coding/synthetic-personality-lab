@@ -2,7 +2,7 @@ flask
 flask-cors
 flask-sqlalchemy
 flask-migrate
-mistralai
+mistralai==2.2.0
 feedparser
 requests
 python-dotenv
