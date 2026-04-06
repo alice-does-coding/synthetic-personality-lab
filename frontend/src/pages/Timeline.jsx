@@ -62,7 +62,10 @@ export default function Timeline() {
   const [engType,      setEngType]      = useState(null);
   const [lastRefresh,  setLastRefresh]  = useState(null);
 
-  const maxTick    = viewingRun?.last_tick ?? 0;
+  // Use max_post_tick (actual highest tick with posts) for the window calculation.
+  // last_tick can be inflated when the tick counter ran ahead of post generation
+  // (e.g. Mistral 401 stopped posts but IPIP tick counter kept going).
+  const maxTick    = viewingRun?.max_post_tick || viewingRun?.last_tick || 0;
   const maxTickRef = useRef(maxTick);
   maxTickRef.current = maxTick;
 

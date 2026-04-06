@@ -11,7 +11,7 @@ runs_bp = Blueprint("runs", __name__)
 
 @runs_bp.route("/", methods=["GET"])
 def list_runs():
-    from models import PersonalitySnapshot
+    from models import PersonalitySnapshot, Post
     from simulation import get_running_run_ids
 
     runs = Run.query.order_by(Run.id).all()
@@ -26,10 +26,21 @@ def list_runs():
         ).group_by(PersonalitySnapshot.run_id).all()
     }
 
+    # Actual max post tick per run — may differ from last_tick when post generation
+    # failed (e.g. Mistral 401) while the tick counter kept incrementing
+    post_tick_maxes = {
+        row[0]: row[1]
+        for row in db.session.query(
+            Post.run_id,
+            db.func.max(Post.tick_number)
+        ).group_by(Post.run_id).all()
+    }
+
     result = []
     for r in runs:
         d = r.to_dict()
         d["tick_count"] = max(tick_floors.get(r.id, 0), r.last_tick or 0)
+        d["max_post_tick"] = post_tick_maxes.get(r.id, 0)
         result.append(d)
 
     return jsonify({

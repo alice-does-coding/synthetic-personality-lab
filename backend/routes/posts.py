@@ -22,7 +22,7 @@ def list_posts():
     query = Post.query.options(
         joinedload(Post.agent),
         joinedload(Post.parent).joinedload(Post.agent),
-    ).filter_by(is_public=True).order_by(Post.created_at.desc())
+    ).filter_by(is_public=True).order_by(Post.tick_number.desc(), Post.id.desc())
     if agent_id:
         query = query.filter_by(agent_id=agent_id)
     if run_id:
