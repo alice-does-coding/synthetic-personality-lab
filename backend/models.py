@@ -109,7 +109,7 @@ class Agent(db.Model):
         cascade="all, delete-orphan",
     )
 
-    def to_dict(self):
+    def to_dict(self, snapshot_count=None):
         return {
             "id": self.id,
             "name": self.name,
@@ -124,7 +124,7 @@ class Agent(db.Model):
                 "agreeableness": self.agreeableness,
                 "neuroticism": self.neuroticism,
             },
-            "snapshot_count": len(self.snapshots),
+            "snapshot_count": snapshot_count if snapshot_count is not None else 0,
         }
 
 
@@ -154,6 +154,7 @@ class Post(db.Model):
         db.Index("ix_posts_run_public",        "run_id", "is_public"),
         db.Index("ix_posts_run_nlp",           "run_id", "nlp_analyzed"),
         db.Index("ix_posts_news_context",      "run_id", postgresql_where=db.text("news_context IS NOT NULL")),
+        db.Index("ix_posts_parent_id",         "parent_id"),
     )
 
     replies = db.relationship(
@@ -163,13 +164,7 @@ class Post(db.Model):
         cascade="all, delete-orphan",
     )
 
-    def _thread_count(self):
-        count = 0
-        for reply in self.replies:
-            count += 1 + reply._thread_count()
-        return count
-
-    def to_dict(self):
+    def to_dict(self, reply_count=None):
         return {
             "id": self.id,
             "agent_id": self.agent_id,
@@ -181,8 +176,8 @@ class Post(db.Model):
             "parent_id": self.parent_id,
             "parent_handle": self.parent.agent.handle if self.parent and self.parent.agent else None,
             "parent_content": self.parent.content if self.parent else None,
-            "reply_count": len(self.replies),
-            "thread_count": self._thread_count(),
+            "reply_count": reply_count if reply_count is not None else 0,
+            "thread_count": reply_count if reply_count is not None else 0,
             "news_context": self.news_context,
             "engagement_type": self.engagement_type,
             "prompt": self.prompt,

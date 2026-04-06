@@ -14,11 +14,23 @@ agents_bp = Blueprint("agents", __name__)
 
 @agents_bp.route("/", methods=["GET"])
 def list_agents():
+    from models import PersonalitySnapshot
     run_id = request.args.get("run_id", type=int)
     q = Agent.query.filter_by(is_active=True)
     if run_id:
         q = q.filter_by(run_id=run_id)
-    return jsonify([a.to_dict() for a in q.all()])
+    agents = q.all()
+
+    # Batch snapshot counts — one query instead of N lazy loads
+    agent_ids = [a.id for a in agents]
+    snap_counts = {}
+    if agent_ids:
+        rows = db.session.query(PersonalitySnapshot.agent_id, func.count(PersonalitySnapshot.id))\
+            .filter(PersonalitySnapshot.agent_id.in_(agent_ids))\
+            .group_by(PersonalitySnapshot.agent_id).all()
+        snap_counts = {agent_id: cnt for agent_id, cnt in rows}
+
+    return jsonify([a.to_dict(snapshot_count=snap_counts.get(a.id, 0)) for a in agents])
 
 
 @agents_bp.route("/", methods=["POST"])

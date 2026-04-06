@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from auth import require_admin
@@ -34,7 +35,18 @@ def list_posts():
         query = query.filter(Post.tick_number <= tick_max)
     if engagement_type:
         query = query.filter_by(engagement_type=engagement_type)
-    return jsonify([p.to_dict() for p in query.limit(limit).all()])
+    posts = query.limit(limit).all()
+
+    # Batch reply counts — one query instead of N lazy loads
+    post_ids = [p.id for p in posts]
+    counts = {}
+    if post_ids:
+        rows = db.session.query(Post.parent_id, func.count(Post.id))\
+            .filter(Post.parent_id.in_(post_ids))\
+            .group_by(Post.parent_id).all()
+        counts = {parent_id: cnt for parent_id, cnt in rows}
+
+    return jsonify([p.to_dict(reply_count=counts.get(p.id, 0)) for p in posts])
 
 
 @posts_bp.route("/<int:post_id>/replies", methods=["GET"])
