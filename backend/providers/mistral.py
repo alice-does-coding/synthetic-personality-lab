@@ -21,11 +21,16 @@ _stats_calls    = 0
 _stats_throttle = 0.0   # total seconds spent waiting in the rate-limit gate
 _stats_api      = 0.0   # total seconds spent waiting for Mistral to respond
 
+# Auth-failure latch — set on first 401; prevents other in-flight workers from
+# each logging their own error and making redundant HTTP calls.
+_auth_failed = threading.Event()
+
 
 def reset_stats():
     global _stats_calls, _stats_throttle, _stats_api
     with _stats_lock:
         _stats_calls = _stats_throttle = _stats_api = 0
+    _auth_failed.clear()
 
 
 def read_stats():
@@ -65,6 +70,9 @@ def chat(client, messages, max_tokens, temperature, model=None):
     """
     global _rl_next, _stats_calls, _stats_throttle, _stats_api
     model = model or Config.MISTRAL_MODEL
+    # If a previous worker already hit a 401 this tick, bail immediately.
+    if _auth_failed.is_set():
+        raise LLMAuthError("Mistral API key invalid (auth failure already seen this tick)")
     max_retries = 6
     for attempt in range(max_retries):
         # Proactive throttle: serialise all threads through a shared gate
@@ -99,7 +107,9 @@ def chat(client, messages, max_tokens, temperature, model=None):
             is_server_err = any(c in err_str for c in ("500", "502", "503", "504", "unavailable"))
             is_timeout    = any(c in err_str for c in ("ReadTimeout", "ConnectTimeout", "TimeoutError", "timed out", "timeout"))
             if is_auth_err:
-                logger.error("Mistral 401 — invalid or exhausted API key. Stopping.")
+                if not _auth_failed.is_set():
+                    logger.error("Mistral 401 — invalid or exhausted API key. Stopping.")
+                    _auth_failed.set()
                 raise LLMAuthError(str(exc)) from exc
             if is_rate_limit and attempt == max_retries - 1:
                 raise LLMRateLimitError(str(exc)) from exc

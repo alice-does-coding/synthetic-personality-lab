@@ -5,7 +5,15 @@ SDKs directly. The provider and model are stored on the Run record.
 """
 from providers.base import LLMAuthError, LLMRateLimitError  # re-export for callers
 
-__all__ = ["chat", "chat_ipip", "extract_text", "LLMAuthError", "LLMRateLimitError"]
+__all__ = ["chat", "chat_ipip", "extract_text", "reset_auth_latches", "LLMAuthError", "LLMRateLimitError"]
+
+
+def reset_auth_latches():
+    """Clear per-provider auth-failure latches. Called at the start of each tick."""
+    from providers.mistral import reset_stats   # reset_stats also clears the latch
+    from providers.hf import reset_auth
+    reset_stats()
+    reset_auth()
 
 
 def chat(provider, model, messages, max_tokens, temperature):

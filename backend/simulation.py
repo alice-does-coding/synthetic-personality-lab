@@ -200,7 +200,7 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
 
         logger.info("tick %d starting (run %d)", tick, run_id)
         tick_start = time.monotonic()
-        _reset_mistral_stats()
+        llm.reset_auth_latches()
 
         news_enabled = run.news_enabled
 

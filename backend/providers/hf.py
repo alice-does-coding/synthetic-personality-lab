@@ -15,7 +15,16 @@ logger = logging.getLogger(__name__)
 _rl_lock = threading.Lock()
 _rl_next = 0.0  # monotonic time when next call is allowed
 
+# Auth-failure latch — set on first 401 this tick; subsequent in-flight workers
+# bail immediately without making HTTP calls or logging duplicate errors.
+_auth_failed = threading.Event()
+
 HF_INFERENCE_URL = "https://api-inference.huggingface.co/models/{model}/v1/chat/completions"
+
+
+def reset_auth():
+    """Clear the auth-failure latch. Called at tick start via llm.py."""
+    _auth_failed.clear()
 
 
 def chat(messages, max_tokens, temperature, model):
@@ -28,6 +37,8 @@ def chat(messages, max_tokens, temperature, model):
     Raises LLMRateLimitError if all retries on 429 are exhausted.
     """
     global _rl_next
+    if _auth_failed.is_set():
+        raise LLMAuthError("HF API key invalid (auth failure already seen this tick)")
     url = HF_INFERENCE_URL.format(model=model)
     headers = {
         "Authorization": f"Bearer {Config.HF_API_KEY}",
@@ -66,7 +77,9 @@ def chat(messages, max_tokens, temperature, model):
             return data["choices"][0]["message"]["content"]
 
         if resp.status_code == 401:
-            logger.error("HF 401 — invalid or exhausted API key. Stopping.")
+            if not _auth_failed.is_set():
+                logger.error("HF 401 — invalid or exhausted API key. Stopping.")
+                _auth_failed.set()
             raise LLMAuthError(f"HF auth error: {resp.text}")
 
         if resp.status_code == 429:
