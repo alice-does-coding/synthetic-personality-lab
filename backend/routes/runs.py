@@ -11,7 +11,7 @@ runs_bp = Blueprint("runs", __name__)
 
 @runs_bp.route("/", methods=["GET"])
 def list_runs():
-    from models import PersonalitySnapshot, Post
+    from models import Agent, PersonalitySnapshot, Post
     from simulation import get_running_run_ids
 
     runs = Run.query.order_by(Run.id).all()
@@ -36,11 +36,28 @@ def list_runs():
         ).group_by(Post.run_id).all()
     }
 
+    # Actual seeded agent count — may differ from agent_count (e.g. pokemon = 151)
+    actual_agent_counts = {
+        row[0]: row[1]
+        for row in db.session.query(Agent.run_id, db.func.count(Agent.id))
+        .group_by(Agent.run_id).all()
+    }
+
+    # Public post count per run
+    post_counts = {
+        row[0]: row[1]
+        for row in db.session.query(Post.run_id, db.func.count(Post.id))
+        .filter(Post.is_public == True)
+        .group_by(Post.run_id).all()
+    }
+
     result = []
     for r in runs:
         d = r.to_dict()
-        d["tick_count"] = max(tick_floors.get(r.id, 0), r.last_tick or 0)
-        d["max_post_tick"] = post_tick_maxes.get(r.id, 0)
+        d["tick_count"]          = max(tick_floors.get(r.id, 0), r.last_tick or 0)
+        d["max_post_tick"]       = post_tick_maxes.get(r.id, 0)
+        d["actual_agent_count"]  = actual_agent_counts.get(r.id, 0)
+        d["post_count"]          = post_counts.get(r.id, 0)
         result.append(d)
 
     return jsonify({

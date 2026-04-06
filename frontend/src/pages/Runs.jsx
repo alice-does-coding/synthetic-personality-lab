@@ -106,16 +106,22 @@ const MODELS = [
   { value: "open-mistral-nemo",    label: "mistral-nemo"  },
 ];
 
-function autoName(model, newsEnabled, persona) {
+function autoName(model, newsEnabled, persona, tickLimit) {
   const now = new Date();
   const mm  = String(now.getMonth() + 1).padStart(2, "0");
   const dd  = String(now.getDate()).padStart(2, "0");
   const hh  = String(now.getHours()).padStart(2, "0");
   const min = String(now.getMinutes()).padStart(2, "0");
-  const shortModel = model.replace(/-latest$/, "").replace(/^(open-|mistral-)/, "").replace(/-/g, "");
+  const ss  = String(now.getSeconds()).padStart(2, "0");
+  const shortModel = model
+    .replace(/-latest$/, "")
+    .replace(/^open-/, "")
+    .replace(/^mistral-/, "")
+    .replace(/-/g, "");
   const news = newsEnabled ? "news" : "no-news";
   const p = persona ? `-${persona}` : "";
-  return `${mm}${dd}-${hh}${min}-${shortModel}-${news}${p}`;
+  const t = tickLimit ? `-t${tickLimit}` : "";
+  return `${mm}${dd}-${hh}${min}${ss}-${shortModel}-${news}${p}${t}`;
 }
 
 const DEFAULTS = {
@@ -126,7 +132,7 @@ const DEFAULTS = {
 };
 
 function CreateRunModal({ onCreated, onClose }) {
-  const [form, setForm] = useState(() => ({ ...DEFAULTS, name: autoName(DEFAULTS.model, DEFAULTS.news_enabled, null) }));
+  const [form, setForm] = useState(() => ({ ...DEFAULTS, name: autoName(DEFAULTS.model, DEFAULTS.news_enabled, null, DEFAULTS.tick_limit) }));
   const [personas, setPersonas] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -141,6 +147,7 @@ function CreateRunModal({ onCreated, onClose }) {
         key === "model"        ? val : next.model,
         key === "news_enabled" ? val : next.news_enabled,
         key === "persona"      ? val : next.persona,
+        key === "tick_limit"   ? val : next.tick_limit,
       );
     }
     return next;
@@ -283,6 +290,28 @@ function RunDetail({ run, isRunning, isAdmin, onStart, onStop, onDeleteRequest }
         <span style={{ ...mono, fontSize: 11, color: "var(--text-dim)", flexShrink: 0 }}>#{run.id}</span>
       </div>
 
+      {/* Stats row */}
+      <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ ...mono, fontSize: 11, color: "var(--text-h)", fontWeight: 700 }}>
+          {run.tick_count ?? 0}
+          {run.tick_limit ? <span style={{ color: "var(--text-dim)", fontWeight: 400 }}> / {run.tick_limit} ticks</span> : <span style={{ color: "var(--text-dim)", fontWeight: 400 }}> ticks</span>}
+        </span>
+        <span style={{ ...mono, fontSize: 11, color: "var(--text-h)", fontWeight: 700 }}>
+          {run.actual_agent_count ?? run.agent_count ?? 0}
+          <span style={{ color: "var(--text-dim)", fontWeight: 400 }}> agents</span>
+          {run.actual_agent_count != null && run.agent_count != null && run.actual_agent_count !== run.agent_count && (
+            <span style={{ color: "var(--text-dim)", fontWeight: 400 }}> (cfg {run.agent_count})</span>
+          )}
+        </span>
+        <span style={{ ...mono, fontSize: 11, color: "var(--text-h)", fontWeight: 700 }}>
+          {run.post_count ?? 0}
+          <span style={{ color: "var(--text-dim)", fontWeight: 400 }}> posts</span>
+        </span>
+        <span style={{ ...mono, fontSize: 11, color: "var(--text-dim)" }}>
+          created {run.created_at ? new Date(run.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+        </span>
+      </div>
+
       {/* Progress bar */}
       {progress !== null && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -290,29 +319,28 @@ function RunDetail({ run, isRunning, isAdmin, onStart, onStop, onDeleteRequest }
             <div style={{ height: 3, width: `${progress}%`, background: isRunning ? "#2dd4bf" : "var(--text-dim)", borderRadius: 2, transition: "width 0.4s ease" }} />
           </div>
           <span style={{ ...mono, fontSize: 9, color: "var(--text-dim)" }}>
-            {run.tick_count ?? 0} / {run.tick_limit} ticks · {progress}%
+            {progress}% complete{run.started_at && ` · started ${new Date(run.started_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`}
           </span>
         </div>
       )}
 
       {/* Config grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 16, padding: "16px 0", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
-        <FIELD label="model"   value={run.model} />
+        <FIELD label="model"   value={run.model?.replace(/-latest$/, "")} />
         <FIELD label="news"    value={run.news_enabled ? "enabled" : "disabled"} color={run.news_enabled ? "#2dd4bf" : "#ff3ea5"} />
         <FIELD label="mode"    value={run.batch_mode ? "batch" : "timed"} color={run.batch_mode ? "#c77dff" : null} />
         <FIELD label="ipip"    value={run.ipip_grounded !== false ? "grounded" : "ungrounded"} color={run.ipip_grounded !== false ? "#2dd4bf" : "#fb923c"} />
-        <FIELD label="agents"  value={run.agent_count} />
-        <FIELD label="framing" value={run.post_framing} />
+        {run.post_framing      && <FIELD label="framing"    value={run.post_framing} />}
+        {run.persona           && <FIELD label="persona"    value={run.persona} />}
         <FIELD label="seed distribution" value={run.seed_distribution} />
         {run.random_seed != null && <FIELD label="random seed" value={run.random_seed} />}
-        {run.persona         && <FIELD label="persona"      value={run.persona} />}
-        <FIELD label="started" value={run.started_at ? run.started_at.slice(0, 10) : null} />
-        <FIELD label="ended"   value={run.ended_at ? run.ended_at.slice(0, 10) : (isRunning ? "ongoing" : null)} color={isRunning ? "#2dd4bf" : null} />
+        {run.ended_at          && <FIELD label="ended"      value={new Date(run.ended_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} />}
       </div>
 
       {/* Error */}
       {run.error && (
         <div style={{ ...mono, fontSize: 11, color: "#fb7185", lineHeight: 1.6, padding: "10px 14px", border: "1px solid #fb7185", background: "rgba(251,113,133,0.05)" }}>
+          <span style={{ fontWeight: 700, display: "block", marginBottom: 4, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em" }}>failure reason</span>
           {run.error}
         </div>
       )}
@@ -333,8 +361,12 @@ function RunDetail({ run, isRunning, isAdmin, onStart, onStop, onDeleteRequest }
                 <Btn disabled>{pending}…</Btn>
               ) : isRunning ? (
                 <Btn onClick={handleStop} color="#fb7185" border="#fb7185">stop</Btn>
-              ) : run.status !== "completed" ? (
+              ) : run.status === "stopped" ? (
+                <Btn onClick={handleStart} color="var(--text-h)" border="var(--text-h)">resume</Btn>
+              ) : run.status === "ready" ? (
                 <Btn onClick={handleStart} color="var(--text-h)" border="var(--text-h)">start</Btn>
+              ) : run.status === "failed" ? (
+                <Btn onClick={handleStart} color="#fb923c" border="#fb923c">retry</Btn>
               ) : null
             )}
             {actionError && <span style={{ ...mono, fontSize: 9, color: "#fb7185" }}>{actionError}</span>}
@@ -374,7 +406,7 @@ function RunItem({ run, isSelected, isRunning, onClick }) {
         </span>
         <span style={{ fontSize: 9, color: "var(--text-dim)" }}>·</span>
         <span style={{ fontSize: 9, color: "var(--text-dim)" }}>
-          {run.agent_count ?? "?"} agents
+          {run.actual_agent_count ?? run.agent_count ?? "?"} agents
         </span>
       </div>
     </button>
