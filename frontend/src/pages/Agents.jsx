@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useRun } from "../RunContext";
+import Avatar from "../components/Avatar";
 
 const TRAIT_COLORS = {
   openness:          "#8b5cf6",
@@ -12,33 +13,15 @@ const TRAIT_COLORS = {
 };
 const SHORT = { openness: "O", conscientiousness: "C", extraversion: "E", agreeableness: "A", neuroticism: "N" };
 
-function Avatar({ name, dominantColor }) {
-  const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-  return (
-    <div style={{
-      width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-      background: dominantColor + "22",
-      border: `2px solid ${dominantColor}44`,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: 15, fontWeight: 700, color: dominantColor,
-    }}>
-      {initials}
-    </div>
-  );
-}
 
 function AgentCard({ agent }) {
   const p = agent.personality;
-  const dominant = Object.entries(TRAIT_COLORS).reduce((best, [trait]) =>
-    (p[trait] ?? 0) > (p[best] ?? 0) ? trait : best
-  , "openness");
-
   return (
     <Link to={`/social/agents/${agent.id}`} style={{ textDecoration: "none", color: "inherit" }}>
       <div className="card" style={{ cursor: "pointer", height: "100%", boxSizing: "border-box" }}>
         {/* Header */}
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
-          <Avatar name={agent.name} dominantColor={TRAIT_COLORS[dominant]} />
+          <Avatar name={agent.name} handle={agent.handle} avatar={agent.avatar} size={44} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text-h)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {agent.name}

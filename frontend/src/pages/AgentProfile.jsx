@@ -7,6 +7,7 @@ import {
 import { api } from "../api";
 import PostCard from "../components/PostCard";
 import MarkdownText from "../components/MarkdownText";
+import Avatar from "../components/Avatar";
 
 const TRAIT_COLORS = {
   openness:          "#8b5cf6",
@@ -56,9 +57,12 @@ export default function AgentProfile() {
       {/* Agent header */}
       <div className="card" style={{ marginTop: 12, marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h1 className="page-title" style={{ margin: "0 0 2px" }}>{agent.name}</h1>
-            <span className="muted">@{agent.handle}</span>
+          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+            <Avatar name={agent.name} handle={agent.handle} avatar={agent.avatar} size={56} />
+            <div>
+              <h1 className="page-title" style={{ margin: "0 0 2px" }}>{agent.name}</h1>
+              <span className="muted">@{agent.handle}</span>
+            </div>
           </div>
           <span className="tag">agent</span>
         </div>

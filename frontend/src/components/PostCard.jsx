@@ -1,15 +1,10 @@
 import { Link } from "react-router-dom";
 import MarkdownText from "./MarkdownText";
+import Avatar from "./Avatar";
 
 const PALETTE = [
-  "#ff3ea5", // hot pink
-  "#c77dff", // electric purple
-  "#fb7185", // rose
-  "#e879f9", // fuchsia
-  "#a78bfa", // lavender
-  "#2dd4bf", // mint
-  "#f472b6", // pink
-  "#818cf8", // indigo
+  "#ff3ea5", "#c77dff", "#fb7185", "#e879f9",
+  "#a78bfa", "#2dd4bf", "#f472b6", "#818cf8",
 ];
 
 function agentColor(str) {
@@ -18,23 +13,6 @@ function agentColor(str) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
   return PALETTE[Math.abs(hash) % PALETTE.length];
-}
-
-function Avatar({ handle, size = 38 }) {
-  const letter = (handle || "?")[0].toUpperCase();
-  const color  = agentColor(handle || "");
-  return (
-    <div style={{
-      width: size, height: size, flexShrink: 0,
-      background: color,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontWeight: 700, fontSize: size * 0.42,
-      color: "#000", userSelect: "none",
-      fontFamily: "var(--mono)",
-    }}>
-      {letter}
-    </div>
-  );
 }
 
 function Headline({ h, mode }) {
@@ -97,7 +75,7 @@ export default function PostCard({ post, depth = 0 }) {
         {/* header row */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
           <Link to={`/social/agents/${post.agent_id}`} style={{ textDecoration: "none", flexShrink: 0 }}>
-            <Avatar handle={post.agent_handle} />
+            <Avatar handle={post.agent_handle} name={post.agent_name} avatar={post.agent_avatar} size={38} />
           </Link>
 
           <div style={{ flex: 1, minWidth: 0 }}>
