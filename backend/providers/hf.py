@@ -118,7 +118,7 @@ def chat(messages, max_tokens, temperature, model):
 # ── Avatar generation (FLUX text-to-image) ───────────────────────────────────
 
 _AVATAR_MODEL = "black-forest-labs/FLUX.1-schnell"
-_AVATAR_URL   = f"https://api-inference.huggingface.co/models/{_AVATAR_MODEL}"
+_AVATAR_URL   = f"https://router.huggingface.co/hf-inference/models/{_AVATAR_MODEL}"
 
 
 def generate_avatar(bio, model=None):
