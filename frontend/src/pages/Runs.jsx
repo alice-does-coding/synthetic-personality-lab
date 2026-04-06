@@ -100,11 +100,41 @@ const Textarea = ({ label, value, onChange, placeholder, rows = 3 }) => (
   </div>
 );
 
-const MODELS = [
-  { value: "mistral-large-latest", label: "mistral-large" },
-  { value: "mistral-small-latest", label: "mistral-small" },
-  { value: "open-mistral-nemo",    label: "mistral-nemo"  },
+const PROVIDERS = [
+  { value: "mistral", label: "Mistral" },
+  { value: "hf",      label: "HuggingFace" },
 ];
+
+const PROVIDER_MODELS = {
+  mistral: [
+    { value: "mistral-large-latest", label: "mistral-large" },
+    { value: "mistral-small-latest", label: "mistral-small" },
+    { value: "open-mistral-nemo",    label: "mistral-nemo"  },
+  ],
+  hf: [
+    { value: "meta-llama/Meta-Llama-3.1-70B-Instruct", label: "Llama 3.1 70B" },
+    { value: "meta-llama/Meta-Llama-3.1-8B-Instruct",  label: "Llama 3.1 8B"  },
+    { value: "Qwen/Qwen2.5-72B-Instruct",              label: "Qwen 2.5 72B"  },
+  ],
+};
+
+function shortModelLabel(model) {
+  // HF model IDs: "meta-llama/Meta-Llama-3.1-70B-Instruct" → "llama31-70b"
+  if (model.includes("/")) {
+    return model.split("/")[1]
+      .replace(/[-_]instruct$/i, "")
+      .replace(/Meta-Llama-/i, "llama")
+      .replace(/Qwen/i, "qwen")
+      .replace(/[.-]/g, "")
+      .toLowerCase()
+      .slice(0, 12);
+  }
+  return model
+    .replace(/-latest$/, "")
+    .replace(/^open-/, "")
+    .replace(/^mistral-/, "")
+    .replace(/-/g, "");
+}
 
 function autoName(model, newsEnabled, persona, tickLimit) {
   const now = new Date();
@@ -113,19 +143,14 @@ function autoName(model, newsEnabled, persona, tickLimit) {
   const hh  = String(now.getHours()).padStart(2, "0");
   const min = String(now.getMinutes()).padStart(2, "0");
   const ss  = String(now.getSeconds()).padStart(2, "0");
-  const shortModel = model
-    .replace(/-latest$/, "")
-    .replace(/^open-/, "")
-    .replace(/^mistral-/, "")
-    .replace(/-/g, "");
   const news = newsEnabled ? "news" : "no-news";
   const p = persona ? `-${persona}` : "";
   const t = tickLimit ? `-t${tickLimit}` : "";
-  return `${mm}${dd}-${hh}${min}${ss}-${shortModel}-${news}${p}${t}`;
+  return `${mm}${dd}-${hh}${min}${ss}-${shortModelLabel(model)}-${news}${p}${t}`;
 }
 
 const DEFAULTS = {
-  name: "", description: "", model: "mistral-large-latest",
+  name: "", description: "", provider: "hf", model: "meta-llama/Meta-Llama-3.1-70B-Instruct",
   news_enabled: true, batch_mode: true, ipip_grounded: true,
   random_seed: "", name_pool_text: "", agent_framing: "",
   persona: null, agent_count: 50, tick_limit: 100, notes: "",
@@ -142,9 +167,13 @@ function CreateRunModal({ onCreated, onClose }) {
 
   const set = (key) => (val) => setForm(f => {
     const next = { ...f, [key]: val };
+    // When provider changes, reset model to first option for that provider
+    if (key === "provider") {
+      next.model = PROVIDER_MODELS[val]?.[0]?.value ?? next.model;
+    }
     if (!nameEdited.current) {
       next.name = autoName(
-        key === "model"        ? val : next.model,
+        key === "model"        ? val : (key === "provider" ? next.model : next.model),
         key === "news_enabled" ? val : next.news_enabled,
         key === "persona"      ? val : next.persona,
         key === "tick_limit"   ? val : next.tick_limit,
@@ -192,12 +221,22 @@ function CreateRunModal({ onCreated, onClose }) {
         </div>
 
         <SectionLabel>identity</SectionLabel>
+        <Input label="name *" value={form.name} onChange={v => { nameEdited.current = true; set("name")(v); }} placeholder="no-news-control" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <Input label="name *" value={form.name} onChange={v => { nameEdited.current = true; set("name")(v); }} placeholder="no-news-control" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ ...mono, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-dim)" }}>provider</label>
+            <div style={{ display: "flex", gap: 2 }}>
+              {PROVIDERS.map(p => (
+                <button key={p.value} onClick={() => set("provider")(p.value)} style={{ ...mono, fontSize: 10, fontWeight: 700, padding: "4px 10px", cursor: "pointer", border: `1px solid ${form.provider === p.value ? "var(--text-h)" : "var(--border)"}`, background: form.provider === p.value ? "var(--text-h)" : "var(--bg)", color: form.provider === p.value ? "var(--bg)" : "var(--text)" }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ ...mono, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-dim)" }}>model</label>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-              {MODELS.map(m => (
+              {(PROVIDER_MODELS[form.provider] ?? []).map(m => (
                 <button key={m.value} onClick={() => set("model")(m.value)} style={{ ...mono, fontSize: 10, fontWeight: 700, padding: "4px 10px", cursor: "pointer", border: `1px solid ${form.model === m.value ? "var(--text-h)" : "var(--border)"}`, background: form.model === m.value ? "var(--text-h)" : "var(--bg)", color: form.model === m.value ? "var(--bg)" : "var(--text)" }}>
                   {m.label}
                 </button>

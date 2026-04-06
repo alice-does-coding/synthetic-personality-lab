@@ -14,8 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from app import create_app
 from config import Config
 from database import db
-from mistralai.client import Mistral
-from mistralai.client.models import TextChunk
+from llm import chat as llm_chat, extract_text as llm_extract_text
 from models import Agent, Follow, PersonalitySnapshot
 
 random.seed(42)
@@ -42,14 +41,6 @@ handle_adjectives = [
 
 
 
-def _extract_text(content):
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    return "".join(c.text for c in content if isinstance(c, TextChunk))
-
-
 def generate_name():
     return random.choice(name_lists)
 
@@ -59,9 +50,9 @@ def generate_handle():
     return f"{handle_adjective.lower()}{handle_number}"
 
 
-def _generate_bio(post_framing, persona_prompt=None):
-    """Call Mistral to generate a bio. Thread-safe — no shared state."""
-    client = Mistral(api_key=Config.MISTRAL_API_KEY)
+def _generate_bio(post_framing, persona_prompt=None, provider="mistral", model=None):
+    """Generate a bio via the configured LLM provider. Thread-safe — no shared state."""
+    model = model or Config.MISTRAL_POST_MODEL
 
     persona_block = (
         f"\nPersona archetype: {persona_prompt}\n"
@@ -76,27 +67,10 @@ def _generate_bio(post_framing, persona_prompt=None):
         '{"bio": "..."}'
     )
 
-    max_retries = 6
-    for attempt in range(max_retries):
-        try:
-            resp = client.chat.complete(
-                model=Config.MISTRAL_POST_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=150,
-                temperature=1.0,
-            )
-            break
-        except Exception as exc:
-            err_str = repr(exc)
-            retryable = any(c in err_str for c in ("429", "500", "502", "503", "504", "unavailable", "rate"))
-            if retryable and attempt < max_retries - 1:
-                backoff = 2 ** attempt
-                print(f"  Mistral error (attempt {attempt+1}/{max_retries}), retrying in {backoff}s: {exc}")
-                time.sleep(backoff)
-            else:
-                raise
-
-    raw = _extract_text(resp.choices[0].message.content).strip()
+    messages = [{"role": "user", "content": prompt}]
+    resp = llm_chat(provider, model, messages, 150, 1.0)
+    raw_content = resp.choices[0].message.content if hasattr(resp, "choices") else resp
+    raw = llm_extract_text(provider, raw_content).strip()
     raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("` \n")
     data = json.loads(raw)
     return data["bio"].strip().strip('"')
@@ -128,6 +102,10 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
 
     run = db.session.get(Run, run_id)
     persona = PERSONAS.get(run.persona) if run and run.persona else None
+
+    # Provider/model for LLM calls during seeding
+    run_provider = run.provider if run and run.provider else "mistral"
+    run_model    = run.model    if run and run.model    else Config.MISTRAL_POST_MODEL
 
     # Reproducible seeding when random_seed is set
     if run.random_seed is not None:
@@ -193,7 +171,9 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
             pool.submit(
                 _generate_bio,
                 cfg.get("bio_framing") or run.post_framing,
-                cfg["bio_prompt"]
+                cfg["bio_prompt"],
+                run_provider,
+                run_model,
             ): i
             for i, cfg in enumerate(configs)
         }

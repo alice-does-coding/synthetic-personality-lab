@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from mistralai.client import Mistral
-from mistralai.client.models import TextChunk
+import llm
+from providers.base import LLMAuthError
 
 from config import Config
 from database import db
@@ -18,9 +18,8 @@ from news import get_headlines_for_agent
 
 logger = logging.getLogger(__name__)
 
-
-class MistralAuthError(Exception):
-    """Raised on 401 — invalid or exhausted API key. Run should be stopped."""
+# Backwards-compatible alias so any external callers still work
+MistralAuthError = LLMAuthError
 
 
 def log_event(app, run_id, level, message, tick=None):
@@ -34,84 +33,17 @@ def log_event(app, run_id, level, message, tick=None):
         logger.warning("log_event failed (run %d): %s", run_id, message)
 
 
-def _extract_text(content):
-    """Extract plain text from a Mistral response content field (str | list | None)."""
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    return "".join(c.text for c in content if isinstance(c, TextChunk))
-
-# ── Rate limiter + retry ──────────────────────────────────────────────────────
-
-_rl_lock = threading.Lock()
-_rl_next = 0.0  # monotonic time when next call is allowed
-
-# Per-tick Mistral call stats (reset at tick start, accumulated across workers)
-_stats_lock   = threading.Lock()
-_stats_calls    = 0
-_stats_throttle = 0.0   # total seconds spent waiting in the rate-limit gate
-_stats_api      = 0.0   # total seconds spent waiting for Mistral to respond
-
+# ── Stats helpers — delegate to providers/mistral.py ─────────────────────────
 
 def _reset_mistral_stats():
-    global _stats_calls, _stats_throttle, _stats_api
-    with _stats_lock:
-        _stats_calls = _stats_throttle = _stats_api = 0
+    from providers.mistral import reset_stats
+    reset_stats()
 
 
 def _read_mistral_stats():
-    with _stats_lock:
-        return _stats_calls, _stats_throttle, _stats_api
+    from providers.mistral import read_stats
+    return read_stats()
 
-
-def _mistral_chat(client, messages, max_tokens, temperature, model=None):
-    """Call Mistral with proactive throttling + exponential-backoff retry on 429/5xx."""
-    global _rl_next, _stats_calls, _stats_throttle, _stats_api
-    model = model or Config.MISTRAL_MODEL
-    max_retries = 6
-    for attempt in range(max_retries):
-        # Proactive throttle: serialise all threads through a shared gate
-        with _rl_lock:
-            now = time.monotonic()
-            wait = _rl_next - now
-            if wait > 0:
-                time.sleep(wait)
-                throttle_s = wait
-            else:
-                throttle_s = 0.0
-            _rl_next = time.monotonic() + (1.0 / Config.MISTRAL_RATE_LIMIT)
-
-        api_start = time.monotonic()
-        try:
-            resp = client.chat.complete(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
-            api_s = time.monotonic() - api_start
-            with _stats_lock:
-                _stats_calls    += 1
-                _stats_throttle += throttle_s
-                _stats_api      += api_s
-            return resp
-        except Exception as exc:
-            err_str = repr(exc)
-            is_auth_err   = "401" in err_str or "unauthorized" in err_str.lower() or "authentication" in err_str.lower()
-            is_rate_limit = "429" in err_str or "rate" in str(exc).lower()
-            is_server_err = any(c in err_str for c in ("500", "502", "503", "504", "unavailable"))
-            is_timeout    = any(c in err_str for c in ("ReadTimeout", "ConnectTimeout", "TimeoutError", "timed out", "timeout"))
-            if is_auth_err:
-                logger.error("Mistral 401 — invalid or exhausted API key. Stopping.")
-                raise MistralAuthError(str(exc)) from exc
-            if (is_rate_limit or is_server_err or is_timeout) and attempt < max_retries - 1:
-                backoff = 2 ** attempt
-                logger.warning("Mistral error (attempt %d/%d) — backing off %ds: %s",
-                               attempt + 1, max_retries, backoff, exc)
-                time.sleep(backoff)
-            else:
-                raise
 
 # ── Per-run thread management ─────────────────────────────────────────────────
 
@@ -159,8 +91,8 @@ def run_tick(app, run_id, force=False, force_ipip=False):
         return
     try:
         _run_tick_for_run(app, run_id, force=force, force_ipip=force_ipip)
-    except MistralAuthError as exc:
-        _fail_run(app, run_id, f"Mistral API key invalid or credits exhausted: {exc}")
+    except LLMAuthError as exc:
+        _fail_run(app, run_id, f"LLM API key invalid or credits exhausted: {exc}")
     except Exception:
         logger.exception("manual tick crashed for run %d", run_id)
     finally:
@@ -196,8 +128,8 @@ def _tick_loop_for_run(app, run_id):
         fatal_reason = None
         try:
             produced, current_tick = _run_tick_for_run(app, run_id)
-        except MistralAuthError as exc:
-            fatal_reason = f"Mistral API key invalid or credits exhausted: {exc}"
+        except LLMAuthError as exc:
+            fatal_reason = f"LLM API key invalid or credits exhausted: {exc}"
         except Exception:
             logger.exception("tick crashed for run %d", run_id)
         finally:
@@ -288,8 +220,13 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                 db.session.commit()
                 logger.info("ghost mode — all %d agents replying to post %d", len(agents), gp.id)
 
+        # Capture provider/model before leaving the main session
+        run_provider = run.provider
+        run_model = run.model
+
         # Snapshot data needed by worker threads before we leave the main session
-        agent_snapshots = [_agent_snapshot(a, ghost_post=ghost_post, news_enabled=news_enabled) for a in agents]
+        agent_snapshots = [_agent_snapshot(a, ghost_post=ghost_post, news_enabled=news_enabled,
+                                           provider=run_provider, model=run_model) for a in agents]
 
         # Each worker opens its own app_context + db session
         def post_worker(snap):
@@ -309,7 +246,7 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent_id = futures[future]
                     try:
                         post_results[agent_id] = future.result()
-                    except (TypeError, AttributeError, MistralAuthError) as exc:
+                    except (TypeError, AttributeError, LLMAuthError) as exc:
                         # Fatal errors — stop the run immediately
                         logger.critical("post generation fatal error for agent %d — halting run %d: %s", agent_id, run_id, exc)
                         raise
@@ -351,7 +288,8 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
             ipip_start = time.monotonic()
             logger.info("tick %d: running IPIP assessments for all %d agents", tick, len(all_agents))
             grounded = run.ipip_grounded if run.ipip_grounded is not None else True
-            all_ipip_snaps = [_ipip_snapshot(a, grounded=grounded) for a in all_agents]
+            all_ipip_snaps = [_ipip_snapshot(a, grounded=grounded,
+                                              provider=run_provider, model=run_model) for a in all_agents]
             ipip_results = {}
             with ThreadPoolExecutor(max_workers=Config.IPIP_WORKERS) as pool:
                 futures = {pool.submit(ipip_worker, s): s["id"] for s in all_ipip_snaps}
@@ -359,7 +297,7 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent_id = futures[future]
                     try:
                         ipip_results[agent_id] = future.result()
-                    except (TypeError, AttributeError, MistralAuthError) as exc:
+                    except (TypeError, AttributeError, LLMAuthError) as exc:
                         logger.critical("IPIP assessment fatal error for agent %d — halting run %d: %s", agent_id, run_id, exc)
                         raise
                     except Exception as exc:
@@ -444,7 +382,7 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
 
 # ── Agent snapshots ───────────────────────────────────────────────────────────
 
-def _ipip_snapshot(agent, grounded=True):
+def _ipip_snapshot(agent, grounded=True, provider="mistral", model=None):
     """Snapshot for IPIP — recent posts are the grounding material when grounded=True."""
     recent = (
         Post.query
@@ -456,11 +394,13 @@ def _ipip_snapshot(agent, grounded=True):
     return {
         "id":           agent.id,
         "grounded":     grounded,
+        "provider":     provider,
+        "model":        model or Config.MISTRAL_MODEL,
         "recent_posts": [{"content": p.content, "is_public": p.is_public} for p in recent],
     }
 
 
-def _agent_snapshot(agent, ghost_post=None, news_enabled=True):
+def _agent_snapshot(agent, ghost_post=None, news_enabled=True, provider="mistral", model=None):
     """Serialize agent state to a plain dict so worker threads don't touch the ORM."""
     followee_ids = [f.followee_id for f in agent.following]
     feed = (
@@ -492,6 +432,8 @@ def _agent_snapshot(agent, ghost_post=None, news_enabled=True):
         "extraversion":      agent.extraversion,
         "agreeableness":     agent.agreeableness,
         "neuroticism":       agent.neuroticism,
+        "provider":          provider,
+        "model":             model or Config.MISTRAL_MODEL,
         "feed":     [{"content": p.content} for p in feed],
         "reply_to": reply_to,
         # Replies never get headlines. Top-level posts get one 60% of the time — the rest post organically.
@@ -517,16 +459,6 @@ def _ipip_assessment_isolated(app, snap):
 
 
 # ── LLM helpers ───────────────────────────────────────────────────────────────
-
-def _mistral_client(timeout_s=60):
-    return Mistral(api_key=Config.MISTRAL_API_KEY, timeout_ms=timeout_s * 1000)
-
-
-def _mistral_client_ipip():
-    """Longer timeout for IPIP — 120-item prompts + recent posts take longer to generate."""
-    return _mistral_client(timeout_s=120)
-
-
 
 def _build_system_prompt(snap):
     return (
@@ -558,24 +490,26 @@ def _clean_post(text):
     return t.strip()
 
 
-def _generate_thoughts(snap, client, user_prompt, n):
+def _generate_thoughts(snap, user_prompt, n):
     """Generate n distinct thoughts in one call, separated by |||."""
+    provider = snap["provider"]
+    model    = snap["model"]
     prompt = (
         user_prompt
         + f"\n\nRespond with {n} different thoughts, each under 280 characters. "
         "Separate them with ||| and nothing else. Output only the thoughts, no numbering, no quotes."
     )
-    resp = _mistral_chat(
-        client,
+    resp = llm.chat(
+        provider,
+        model,
         messages=[
             {"role": "system", "content": _build_system_prompt(snap)},
             {"role": "user",   "content": prompt},
         ],
         max_tokens=Config.MAX_POST_TOKENS * n,
         temperature=0.9,
-        model=Config.MISTRAL_POST_MODEL,
     )
-    raw = _extract_text(resp.choices[0].message.content).strip()
+    raw = llm.extract_text(provider, resp.choices[0].message.content if hasattr(resp, "choices") else resp).strip()
     thoughts = [_clean_post(t) for t in raw.split("|||") if t.strip()]
     # fallback: if separator wasn't used, split on newlines
     if len(thoughts) < 2:
@@ -585,7 +519,8 @@ def _generate_thoughts(snap, client, user_prompt, n):
 
 
 def _generate_post(snap):
-    client = _mistral_client()
+    provider = snap["provider"]
+    model    = snap["model"]
 
     headlines = snap.get("headlines", [])
 
@@ -593,17 +528,18 @@ def _generate_post(snap):
         # Replies are direct social responses — single generation, always public
         r = snap["reply_to"]
         user_prompt = f"\"{r['content']}\""
-        resp = _mistral_chat(
-            client,
+        resp = llm.chat(
+            provider,
+            model,
             messages=[
                 {"role": "system", "content": _build_system_prompt(snap)},
                 {"role": "user",   "content": user_prompt + "\n\nReply in plain text, under 280 characters. No quotes around your reply."},
             ],
             max_tokens=Config.MAX_POST_TOKENS,
             temperature=0.9,
-            model=Config.MISTRAL_POST_MODEL,
         )
-        content = _clean_post(_extract_text(resp.choices[0].message.content))[:280]
+        raw_content = resp.choices[0].message.content if hasattr(resp, "choices") else resp
+        content = _clean_post(llm.extract_text(provider, raw_content))[:280]
         return [(content, r["id"], None, "reply", user_prompt, True)]
 
     # Top-level posts: generate N thoughts, agent selects one to publish
@@ -623,7 +559,7 @@ def _generate_post(snap):
         stored_headlines = None
         engagement_type = "organic"
 
-    thoughts = _generate_thoughts(snap, client, user_prompt, Config.N_THOUGHTS)
+    thoughts = _generate_thoughts(snap, user_prompt, Config.N_THOUGHTS)
     selected_idx = 0
 
     return [
@@ -640,7 +576,8 @@ def _generate_post(snap):
 
 
 def _run_ipip_assessment(snap):
-    client = _mistral_client_ipip()
+    provider = snap["provider"]
+    model    = snap["model"]
     items_block = "\n".join(f"{item['number']}. {item['text']}" for item in ITEMS)
 
     recent_posts = snap.get("recent_posts", []) if snap.get("grounded", True) else []
@@ -667,8 +604,9 @@ def _run_ipip_assessment(snap):
         "Reply with ONLY a comma-separated list of 120 integers (e.g. 3,4,2,5,1,...).\n\n"
         f"Statements:\n{items_block}"
     )
-    resp = _mistral_chat(
-        client,
+    resp = llm.chat_ipip(
+        provider,
+        model,
         messages=[
             {"role": "system", "content": _build_ipip_system_prompt(snap)},
             {"role": "user",   "content": user_prompt},
@@ -676,7 +614,8 @@ def _run_ipip_assessment(snap):
         max_tokens=1000,
         temperature=0.3,
     )
-    raw = _extract_text(resp.choices[0].message.content).strip()
+    raw_content = resp.choices[0].message.content if hasattr(resp, "choices") else resp
+    raw = llm.extract_text(provider, raw_content).strip()
     scores = _parse_ipip_response(raw, snap["id"])
     if scores is None:
         return None

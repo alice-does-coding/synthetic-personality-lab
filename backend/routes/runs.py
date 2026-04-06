@@ -85,6 +85,7 @@ def create_run():
         name=data["name"],
         description=data.get("description"),
         model=data.get("model", "mistral-large-latest"),
+        provider=data.get("provider", "mistral"),
         model_version=data.get("model_version"),
         news_enabled=data.get("news_enabled", True),
         news_categories=data.get("news_categories"),

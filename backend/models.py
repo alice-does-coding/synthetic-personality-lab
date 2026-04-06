@@ -9,6 +9,7 @@ class Run(db.Model):
     name              = db.Column(db.String(100), nullable=False)
     description       = db.Column(db.Text)
     model             = db.Column(db.String(100), nullable=False, default="mistral-large-latest")
+    provider          = db.Column(db.String(50), nullable=False, default="mistral")
     model_version     = db.Column(db.String(100))
     news_enabled      = db.Column(db.Boolean, nullable=False, default=True)
     news_categories   = db.Column(db.JSON)  # list of category strings
@@ -51,6 +52,7 @@ class Run(db.Model):
             "name":              self.name,
             "description":       self.description,
             "model":             self.model,
+            "provider":          self.provider,
             "model_version":     self.model_version,
             "news_enabled":      self.news_enabled,
             "news_categories":   self.news_categories,

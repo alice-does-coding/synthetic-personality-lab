@@ -8,6 +8,7 @@ migrate = Migrate()
 # Safe to re-run: IF NOT EXISTS / try-except handles idempotency.
 _MIGRATIONS = [
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS error TEXT",
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS provider VARCHAR(50) NOT NULL DEFAULT 'mistral'",
 ]
 
 
