@@ -238,7 +238,16 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
         db.session.add(agent)
         agents_created.append(agent)
 
-    db.session.flush()
+    try:
+        db.session.flush()
+    except Exception as exc:
+        from sqlalchemy.exc import IntegrityError
+        if isinstance(exc, IntegrityError) and "agents_handle_key" in str(exc):
+            db.session.rollback()
+            raise RuntimeError(
+                "Handle collision during seeding — retry with a different seed or re-run"
+            ) from exc
+        raise
 
     all_ids = [a.id for a in agents_created]
     follow_pairs = set()

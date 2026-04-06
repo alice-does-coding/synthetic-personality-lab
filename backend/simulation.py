@@ -19,6 +19,10 @@ from news import get_headlines_for_agent
 logger = logging.getLogger(__name__)
 
 
+class MistralAuthError(Exception):
+    """Raised on 401 — invalid or exhausted API key. Run should be stopped."""
+
+
 def _extract_text(content):
     """Extract plain text from a Mistral response content field (str | list | None)."""
     if content is None:
@@ -83,9 +87,13 @@ def _mistral_chat(client, messages, max_tokens, temperature, model=None):
             return resp
         except Exception as exc:
             err_str = repr(exc)
+            is_auth_err   = "401" in err_str or "unauthorized" in err_str.lower() or "authentication" in err_str.lower()
             is_rate_limit = "429" in err_str or "rate" in str(exc).lower()
             is_server_err = any(c in err_str for c in ("500", "502", "503", "504", "unavailable"))
             is_timeout    = any(c in err_str for c in ("ReadTimeout", "ConnectTimeout", "TimeoutError", "timed out", "timeout"))
+            if is_auth_err:
+                logger.error("Mistral 401 — invalid or exhausted API key. Stopping.")
+                raise MistralAuthError(str(exc)) from exc
             if (is_rate_limit or is_server_err or is_timeout) and attempt < max_retries - 1:
                 backoff = 2 ** attempt
                 logger.warning("Mistral error (attempt %d/%d) — backing off %ds: %s",
@@ -151,12 +159,25 @@ def _tick_loop_for_run(app, run_id):
     while True:
         lock = _get_tick_lock(run_id)
         lock.acquire()
+        auth_failed = False
         try:
             _run_tick_for_run(app, run_id)
+        except MistralAuthError as exc:
+            logger.error("run %d stopping — Mistral auth error: %s", run_id, exc)
+            auth_failed = True
         except Exception:
             logger.exception("tick crashed for run %d", run_id)
         finally:
             lock.release()
+
+        if auth_failed:
+            with app.app_context():
+                run = db.session.get(Run, run_id)
+                if run:
+                    run.status = "stopped"
+                    run.ended_at = __import__("datetime").datetime.utcnow()
+                    db.session.commit()
+            break
 
         with app.app_context():
             run = db.session.get(Run, run_id)
@@ -299,6 +320,9 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                 if result is None:
                     continue
                 scores, big_five = result
+                if any(big_five.get(k) is None for k in ("O", "C", "E", "A", "N")):
+                    logger.warning("skipping snapshot for agent %d — incomplete big five: %s", agent_id, big_five)
+                    continue
                 for idx, score in enumerate(scores):
                     db.session.add(IpipResponse(
                         run_id=run_id,

@@ -26,12 +26,14 @@ def list_news():
         rows = db.session.execute(text(f"""
             SELECT item->>'url' AS url, count(*) AS cnt
             FROM posts p, json_array_elements(p.news_context) AS item
-            WHERE p.news_context IS NOT NULL {run_filter}
+            WHERE p.news_context IS NOT NULL
+              AND json_typeof(p.news_context::json) = 'array'
+              {run_filter}
             GROUP BY item->>'url'
         """), params).fetchall()
         engagement = {r[0]: r[1] for r in rows if r[0]}
     except Exception:
-        pass  # SQLite or schema mismatch — engagement stays empty
+        db.session.rollback()  # prevent aborted-transaction poisoning the pool
 
     result = []
     for item in items:
@@ -53,11 +55,13 @@ def news_posts(item_id):
         rows = db.session.execute(text("""
             SELECT p.id FROM posts p, json_array_elements(p.news_context) AS h
             WHERE p.run_id = :run_id AND p.news_context IS NOT NULL
+              AND json_typeof(p.news_context::json) = 'array'
               AND h->>'url' = :url
         """), {"run_id": item.run_id, "url": item.url}).fetchall()
         ids = [r[0] for r in rows]
         posts = Post.query.filter(Post.id.in_(ids)).order_by(Post.created_at.desc()).all() if ids else []
     except Exception:
+        db.session.rollback()
         posts = []
     return jsonify([p.to_dict() for p in posts])
 
