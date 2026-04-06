@@ -19,7 +19,7 @@ _rl_next = 0.0  # monotonic time when next call is allowed
 # bail immediately without making HTTP calls or logging duplicate errors.
 _auth_failed = threading.Event()
 
-HF_INFERENCE_URL = "https://router.huggingface.co/hf-inference/models/{model}/v1/chat/completions"
+HF_INFERENCE_URL = "https://router.huggingface.co/hf-inference/v1/chat/completions"
 
 
 def reset_auth():
@@ -39,7 +39,7 @@ def chat(messages, max_tokens, temperature, model):
     global _rl_next
     if _auth_failed.is_set():
         raise LLMAuthError("HF API key invalid (auth failure already seen this tick)")
-    url = HF_INFERENCE_URL.format(model=model)
+    url = HF_INFERENCE_URL
     headers = {
         "Authorization": f"Bearer {Config.HF_API_KEY}",
         "Content-Type": "application/json",
