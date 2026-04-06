@@ -31,8 +31,12 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude Code
+.claude/settings.local.json
+
 # Data exports and analysis artifacts
 backend/*.json
 backend/*.png
 backend/*.html
 backend/instance/
+backend/corpus_output/
