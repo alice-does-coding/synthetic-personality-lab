@@ -68,30 +68,52 @@ def get_personality_history(agent_id):
 
 @agents_bp.route("/population", methods=["GET"])
 def population_drift():
-    """Average + SD of OCEAN scores across all agents per tick — computed in SQL."""
+    """Average + SD of OCEAN scores across all agents per tick."""
     run_id = request.args.get("run_id", type=int)
-
     cols = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"]
-    trait_cols = getattr(PersonalitySnapshot, "__table__").c
 
-    aggs = [PersonalitySnapshot.tick_number, func.count(PersonalitySnapshot.id).label("n")]
-    for t in cols:
-        col = getattr(PersonalitySnapshot, t)
-        aggs.append(func.avg(col).label(t))
-        aggs.append(func.stddev_pop(col).label(f"{t}_sd"))
+    is_postgres = db.engine.dialect.name == "postgresql"
 
-    q = db.session.query(*aggs)
-    if run_id:
-        q = q.filter(PersonalitySnapshot.run_id == run_id)
-    rows = q.group_by(PersonalitySnapshot.tick_number).order_by(PersonalitySnapshot.tick_number).all()
-
-    result = []
-    for row in rows:
-        d = {"tick_number": row.tick_number, "agent_count": row.n}
+    if is_postgres:
+        aggs = [PersonalitySnapshot.tick_number, func.count(PersonalitySnapshot.id).label("n")]
         for t in cols:
-            d[t] = round(getattr(row, t) or 0, 4)
-            d[f"{t}_sd"] = round(getattr(row, f"{t}_sd") or 0, 4)
-        result.append(d)
+            col = getattr(PersonalitySnapshot, t)
+            aggs.append(func.avg(col).label(t))
+            aggs.append(func.stddev_pop(col).label(f"{t}_sd"))
+        q = db.session.query(*aggs)
+        if run_id:
+            q = q.filter(PersonalitySnapshot.run_id == run_id)
+        rows = q.group_by(PersonalitySnapshot.tick_number).order_by(PersonalitySnapshot.tick_number).all()
+        result = []
+        for row in rows:
+            d = {"tick_number": row.tick_number, "agent_count": row.n}
+            for t in cols:
+                d[t] = round(getattr(row, t) or 0, 4)
+                d[f"{t}_sd"] = round(getattr(row, f"{t}_sd") or 0, 4)
+            result.append(d)
+    else:
+        # SQLite: fetch raw rows and compute stddev in Python
+        import math
+        from collections import defaultdict
+        q = db.session.query(PersonalitySnapshot)
+        if run_id:
+            q = q.filter(PersonalitySnapshot.run_id == run_id)
+        by_tick = defaultdict(list)
+        for s in q.order_by(PersonalitySnapshot.tick_number).all():
+            by_tick[s.tick_number].append(s)
+        result = []
+        for tick, snaps in sorted(by_tick.items()):
+            d = {"tick_number": tick, "agent_count": len(snaps)}
+            for t in cols:
+                vals = [getattr(s, t) for s in snaps if getattr(s, t) is not None]
+                if vals:
+                    mean = sum(vals) / len(vals)
+                    sd = math.sqrt(sum((v - mean) ** 2 for v in vals) / len(vals))
+                else:
+                    mean, sd = 0, 0
+                d[t] = round(mean, 4)
+                d[f"{t}_sd"] = round(sd, 4)
+            result.append(d)
 
     return jsonify(result)
 
