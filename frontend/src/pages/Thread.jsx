@@ -2,27 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api";
 import MarkdownText from "../components/MarkdownText";
-
-const PALETTE = ["#ff3ea5","#c77dff","#fb7185","#e879f9","#a78bfa","#2dd4bf","#f472b6","#818cf8"];
-function avatarColor(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  return PALETTE[Math.abs(hash) % PALETTE.length];
-}
-
-function Avatar({ name, handle, size = 36 }) {
-  const letter = (handle || name || "?")[0].toUpperCase();
-  return (
-    <div style={{
-      width: size, height: size, flexShrink: 0,
-      background: avatarColor(handle || name || ""),
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontWeight: 700, fontSize: Math.floor(size * 0.4), color: "#000", userSelect: "none",
-    }}>
-      {letter}
-    </div>
-  );
-}
+import Avatar from "../components/Avatar";
 
 function Headline({ h, mode }) {
   return (
@@ -84,7 +64,7 @@ function ThreadNode({ node, isRoot = false, depth = 0 }) {
       {/* Post row */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         <Link to={`/social/agents/${node.agent_id}`} style={{ textDecoration: "none", flexShrink: 0 }}>
-          <Avatar name={node.agent_name} handle={node.agent_handle} size={avatarSize} />
+          <Avatar name={node.agent_name} handle={node.agent_handle} avatar={node.agent_avatar} size={avatarSize} />
         </Link>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>

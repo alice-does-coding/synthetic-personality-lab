@@ -86,6 +86,7 @@ class Agent(db.Model):
     name = db.Column(db.String(100), nullable=False)
     handle = db.Column(db.String(50), unique=True, nullable=False)
     bio = db.Column(db.Text, default="")
+    avatar = db.Column(db.Text, nullable=True)   # base64 data URL from FLUX
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -121,6 +122,7 @@ class Agent(db.Model):
             "name": self.name,
             "handle": self.handle,
             "bio": self.bio,
+            "avatar": self.avatar,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
             "personality": {
@@ -176,6 +178,7 @@ class Post(db.Model):
             "agent_id": self.agent_id,
             "agent_handle": self.agent.handle if self.agent else None,
             "agent_name": self.agent.name if self.agent else None,
+            "agent_avatar": self.agent.avatar if self.agent else None,
             "content": self.content,
             "tick_number": self.tick_number,
             "created_at": self.created_at.isoformat(),

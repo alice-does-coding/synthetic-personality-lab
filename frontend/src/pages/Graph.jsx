@@ -58,6 +58,7 @@ export default function Graph() {
 
   const containerRef = useRef(null);
   const graphRef     = useRef(null);
+  const imgCache     = useRef({});
 
   useEffect(() => {
     setLoading(true);
@@ -73,6 +74,20 @@ export default function Graph() {
     graphRef.current.d3Force("charge").strength(-800);
     graphRef.current.d3Force("link").distance(160);
   }, [graphData]);
+
+  // Pre-load avatars; force canvas repaint when each image arrives
+  useEffect(() => {
+    graphData.nodes.forEach(node => {
+      if (node.avatar && !imgCache.current[node.id]) {
+        const img = new Image();
+        img.onload = () => {
+          imgCache.current[node.id] = img;
+          graphRef.current?.refresh?.();
+        };
+        img.src = node.avatar;
+      }
+    });
+  }, [graphData.nodes]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -159,12 +174,25 @@ export default function Graph() {
       ctx.fill();
     }
 
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-    ctx.fillStyle = color;
-    ctx.fill();
+    const img = imgCache.current[node.id];
+    if (img?.complete && img.naturalWidth > 0) {
+      // Circular avatar portrait
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+      ctx.clip();
+      ctx.drawImage(img, node.x - r, node.y - r, r * 2, r * 2);
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
 
     if (isSel || isHov) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
       ctx.strokeStyle = isSel ? "#ff3ea5" : "#fff";
       ctx.lineWidth = 1.5 / globalScale;
       ctx.stroke();

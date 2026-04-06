@@ -113,3 +113,61 @@ def chat(messages, max_tokens, temperature, model):
         # Any other non-2xx — log body before raising so we can diagnose
         logger.error("HF %d error for model %s: %s", resp.status_code, model, resp.text[:500])
         resp.raise_for_status()
+
+
+# ── Avatar generation (FLUX text-to-image) ───────────────────────────────────
+
+_AVATAR_MODEL = "black-forest-labs/FLUX.1-schnell"
+_AVATAR_URL   = f"https://api-inference.huggingface.co/models/{_AVATAR_MODEL}"
+
+
+def generate_avatar(bio, model=None):
+    """Generate a 256×256 profile portrait from a bio via FLUX.1-schnell.
+
+    Returns a base64 data URL (data:image/...) or None on any failure.
+    Failures are logged but never raised — avatar generation is best-effort.
+    """
+    import base64
+
+    prompt = (
+        f"A digital portrait of an entity with this character: {bio[:200]}. "
+        "Profile picture, expressive face, dark background, vibrant, high detail."
+    )
+    url = _AVATAR_URL
+    headers = {
+        "Authorization": f"Bearer {Config.HF_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "inputs": prompt,
+        "parameters": {"width": 256, "height": 256, "num_inference_steps": 4},
+    }
+
+    for attempt in range(4):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=120)
+        except requests.exceptions.Timeout:
+            logger.warning("FLUX avatar timeout (attempt %d/4)", attempt + 1)
+            continue
+
+        if resp.status_code == 200:
+            mime = resp.headers.get("Content-Type", "image/png").split(";")[0].strip()
+            b64  = base64.b64encode(resp.content).decode("utf-8")
+            return f"data:{mime};base64,{b64}"
+
+        if resp.status_code == 503:
+            # Model loading — HF returns estimated_time in body
+            import time, json as _json
+            try:
+                wait = _json.loads(resp.text).get("estimated_time", 20)
+            except Exception:
+                wait = 20
+            logger.info("FLUX model loading — waiting %.0fs", wait)
+            time.sleep(min(wait, 30))
+            continue
+
+        logger.warning("FLUX avatar failed (%d): %s", resp.status_code, resp.text[:200])
+        return None
+
+    logger.warning("FLUX avatar: all retries exhausted")
+    return None

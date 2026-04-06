@@ -5,7 +5,7 @@ SDKs directly. The provider and model are stored on the Run record.
 """
 from providers.base import LLMAuthError, LLMRateLimitError  # re-export for callers
 
-__all__ = ["chat", "chat_ipip", "extract_text", "reset_auth_latches", "LLMAuthError", "LLMRateLimitError"]
+__all__ = ["chat", "chat_ipip", "extract_text", "generate_avatar", "reset_auth_latches", "LLMAuthError", "LLMRateLimitError"]
 
 
 def reset_auth_latches():
@@ -43,6 +43,13 @@ def chat_ipip(provider, model, messages, max_tokens, temperature):
         from providers.mistral import make_ipip_client, chat as mistral_chat
         client = make_ipip_client()
         return mistral_chat(client, messages, max_tokens, temperature, model=model)
+
+
+def generate_avatar(provider, bio):
+    """Generate a profile image from a bio. Currently HF-only (FLUX).
+    Returns a base64 data URL or None."""
+    from providers.hf import generate_avatar as hf_avatar
+    return hf_avatar(bio)
 
 
 def extract_text(provider, content):

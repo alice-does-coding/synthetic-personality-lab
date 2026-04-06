@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from app import create_app
 from config import Config
 from database import db
+import llm as _llm
 from llm import chat as llm_chat, extract_text as llm_extract_text
 from models import Agent, Follow, PersonalitySnapshot
 
@@ -225,7 +226,7 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
         agents_created.append(agent)
 
     try:
-        db.session.flush()
+        db.session.flush()  # assigns IDs; avatars generated next
     except Exception as exc:
         from sqlalchemy.exc import IntegrityError
         if isinstance(exc, IntegrityError) and "agents_handle_key" in str(exc):
@@ -234,6 +235,30 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
                 "Handle collision during seeding — retry with a different seed or re-run"
             ) from exc
         raise
+
+    # ── Generate avatars in parallel (best-effort — failures leave avatar=None) ─
+    if run_provider == "hf" and Config.HF_API_KEY:
+        print(f"  Generating {len(agents_created)} agent avatars in parallel...")
+        log_event(_app, run_id, "info", f"Generating {len(agents_created)} agent avatars via FLUX")
+        avatars = [None] * len(agents_created)
+        with ThreadPoolExecutor(max_workers=min(Config.MAX_WORKERS, 6)) as pool:
+            futures = {
+                pool.submit(_llm.generate_avatar, run_provider, a.bio): i
+                for i, a in enumerate(agents_created)
+            }
+            for future in as_completed(futures):
+                i = futures[future]
+                try:
+                    avatars[i] = future.result()
+                    if avatars[i]:
+                        print(f"  [{i+1}/{len(agents_created)}] avatar ok")
+                except Exception as exc:
+                    print(f"  [{i+1}/{len(agents_created)}] avatar failed: {exc}")
+        for i, agent in enumerate(agents_created):
+            if avatars[i]:
+                agent.avatar = avatars[i]
+        n_ok = sum(1 for a in avatars if a)
+        log_event(_app, run_id, "info", f"Avatars generated — {n_ok}/{len(agents_created)} succeeded")
 
     all_ids = [a.id for a in agents_created]
     follow_pairs = set()

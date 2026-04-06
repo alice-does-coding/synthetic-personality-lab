@@ -9,6 +9,7 @@ migrate = Migrate()
 _MIGRATIONS = [
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS error TEXT",
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS provider VARCHAR(50) NOT NULL DEFAULT 'mistral'",
+    "ALTER TABLE agents ADD COLUMN IF NOT EXISTS avatar TEXT",
 ]
 
 

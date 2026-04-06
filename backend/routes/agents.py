@@ -160,6 +160,7 @@ def graph():
             "id":                a.id,
             "name":              a.name,
             "handle":            a.handle,
+            "avatar":            a.avatar,
             "openness":          a.openness,
             "conscientiousness": a.conscientiousness,
             "extraversion":      a.extraversion,
