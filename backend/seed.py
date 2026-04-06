@@ -152,10 +152,14 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
             entry = name_list[i]
             cfg["name_override"] = entry
             cfg["handle_base"]   = re.sub(r"[^a-z0-9_]", "", entry.lower().replace(" ", "_").replace("-", "_"))[:30] or f"agent{i}"
-            cfg["bio_framing"]   = (
-                f"{entry}, an original Generation 1 Pokémon" if is_pokemon
-                else f"{entry}, {run.post_framing}"
-            )
+            if is_pokemon:
+                cfg["bio_framing"] = f"{entry}, an original Generation 1 Pokémon"
+            elif custom_pool:
+                # Named character pool — stay in character, ignore generic post_framing
+                cfg["bio_framing"] = (
+                    f"{entry} — write in first person as this real historical figure or fictional character, "
+                    "capturing their actual personality, era, role, and voice. Do not invent a modern persona."
+                )
         configs.append(cfg)
 
     # ── Log seeding started ───────────────────────────────────────────────────
@@ -243,7 +247,7 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
         avatars = [None] * len(agents_created)
         with ThreadPoolExecutor(max_workers=min(Config.MAX_WORKERS, 6)) as pool:
             futures = {
-                pool.submit(_llm.generate_avatar, run_provider, a.bio): i
+                pool.submit(_llm.generate_avatar, run_provider, a.bio, a.name): i
                 for i, a in enumerate(agents_created)
             }
             for future in as_completed(futures):

@@ -45,11 +45,11 @@ def chat_ipip(provider, model, messages, max_tokens, temperature):
         return mistral_chat(client, messages, max_tokens, temperature, model=model)
 
 
-def generate_avatar(provider, bio):
+def generate_avatar(provider, bio, name=None):
     """Generate a profile image from a bio. Currently HF-only (FLUX).
     Returns a base64 data URL or None."""
     from providers.hf import generate_avatar as hf_avatar
-    return hf_avatar(bio)
+    return hf_avatar(bio, name=name)
 
 
 def extract_text(provider, content):

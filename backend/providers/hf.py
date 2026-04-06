@@ -121,7 +121,7 @@ _AVATAR_MODEL = "black-forest-labs/FLUX.1-schnell"
 _AVATAR_URL   = f"https://router.huggingface.co/hf-inference/models/{_AVATAR_MODEL}"
 
 
-def generate_avatar(bio, model=None):
+def generate_avatar(bio, name=None, model=None):
     """Generate a 256×256 profile portrait from a bio via FLUX.1-schnell.
 
     Returns a base64 data URL (data:image/...) or None on any failure.
@@ -129,10 +129,16 @@ def generate_avatar(bio, model=None):
     """
     import base64
 
-    prompt = (
-        f"A digital portrait of an entity with this character: {bio[:200]}. "
-        "Profile picture, expressive face, dark background, vibrant, high detail."
-    )
+    if name:
+        prompt = (
+            f"Portrait of {name}. {bio[:150]} "
+            "Profile picture, expressive face, dark background, vibrant, high detail."
+        )
+    else:
+        prompt = (
+            f"A digital portrait of an entity with this character: {bio[:200]}. "
+            "Profile picture, expressive face, dark background, vibrant, high detail."
+        )
     url = _AVATAR_URL
     headers = {
         "Authorization": f"Bearer {Config.HF_API_KEY}",
