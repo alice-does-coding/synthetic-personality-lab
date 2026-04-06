@@ -19,7 +19,7 @@ _rl_next = 0.0  # monotonic time when next call is allowed
 # bail immediately without making HTTP calls or logging duplicate errors.
 _auth_failed = threading.Event()
 
-HF_INFERENCE_URL = "https://api-inference.huggingface.co/models/{model}/v1/chat/completions"
+HF_INFERENCE_URL = "https://router.huggingface.co/hf-inference/models/{model}/v1/chat/completions"
 
 
 def reset_auth():
@@ -81,6 +81,16 @@ def chat(messages, max_tokens, temperature, model):
                 logger.error("HF 401 — invalid or exhausted API key. Stopping.")
                 _auth_failed.set()
             raise LLMAuthError(f"HF auth error: {resp.text}")
+
+        if resp.status_code == 403:
+            # Model gated — user must accept terms on huggingface.co/model-page
+            msg = f"HF 403 — model access denied for {model}. Accept the model's terms on huggingface.co then retry."
+            logger.error(msg)
+            raise LLMAuthError(msg)
+
+        if resp.status_code == 422:
+            logger.error("HF 422 — invalid request payload for %s: %s", model, resp.text[:300])
+            raise RuntimeError(f"HF 422 invalid request: {resp.text[:200]}")
 
         if resp.status_code == 429:
             if attempt < max_retries - 1:
