@@ -112,9 +112,8 @@ const PROVIDER_MODELS = {
     { value: "open-mistral-nemo",    label: "mistral-nemo"  },
   ],
   hf: [
-    { value: "meta-llama/Meta-Llama-3.1-70B-Instruct", label: "Llama 3.1 70B" },
-    { value: "meta-llama/Meta-Llama-3.1-8B-Instruct",  label: "Llama 3.1 8B"  },
-    { value: "Qwen/Qwen2.5-72B-Instruct",              label: "Qwen 2.5 72B"  },
+    { value: "Qwen/Qwen2.5-72B-Instruct",   label: "Qwen 2.5 72B"  },
+    { value: "Qwen/Qwen2.5-7B-Instruct",    label: "Qwen 2.5 7B"   },
   ],
 };
 
@@ -150,7 +149,7 @@ function autoName(model, newsEnabled, persona, tickLimit) {
 }
 
 const DEFAULTS = {
-  name: "", description: "", provider: "hf", model: "meta-llama/Meta-Llama-3.1-70B-Instruct",
+  name: "", description: "", provider: "hf", model: "Qwen/Qwen2.5-72B-Instruct",
   news_enabled: true, batch_mode: true, ipip_grounded: true,
   random_seed: "", name_pool_text: "", agent_framing: "",
   persona: null, agent_count: 50, tick_limit: 100, notes: "",
