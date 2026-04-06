@@ -398,8 +398,19 @@ const STATUS_STYLE = {
 };
 
 function RunCard({ run, isViewing, isRunning, isAdmin, onView, onStart, onStop, onDeleteRequest }) {
+  const [pending, setPending] = useState(null); // "starting" | "stopping" | null
+  const [actionError, setActionError] = useState(null);
   const progress = run.tick_limit ? Math.min(100, Math.round((run.tick_count ?? 0) / run.tick_limit * 100)) : null;
   const st = STATUS_STYLE[run.status] ?? STATUS_STYLE.stopped;
+
+  const handleStart = async () => {
+    setPending("starting"); setActionError(null);
+    try { await onStart(run.id); } catch (e) { setActionError(e.message); } finally { setPending(null); }
+  };
+  const handleStop = async () => {
+    setPending("stopping"); setActionError(null);
+    try { await onStop(run.id); } catch (e) { setActionError(e.message); } finally { setPending(null); }
+  };
 
   return (
     <div style={{ border: `1px solid ${isViewing ? "#2dd4bf" : "var(--border)"}`, padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
@@ -453,24 +464,31 @@ function RunCard({ run, isViewing, isRunning, isAdmin, onView, onStart, onStop, 
       )}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {!isViewing && (
             <button onClick={() => onView(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #2dd4bf", background: "var(--bg)", color: "#2dd4bf" }}>
               view
             </button>
           )}
           {isAdmin && run.status !== "seeding" && run.status !== "pending" && (
-            isRunning ? (
-              <button onClick={() => onStop(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #fb7185", background: "var(--bg)", color: "#fb7185" }}>
+            pending ? (
+              <button disabled style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "default", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text-dim)", opacity: 0.5 }}>
+                {pending}…
+              </button>
+            ) : isRunning ? (
+              <button onClick={handleStop} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid #fb7185", background: "var(--bg)", color: "#fb7185" }}>
                 stop
               </button>
             ) : (
               run.status !== "completed" && (
-                <button onClick={() => onStart(run.id)} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid var(--text)", background: "var(--bg)", color: "var(--text-h)" }}>
+                <button onClick={handleStart} style={{ ...mono, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 14px", cursor: "pointer", border: "1px solid var(--text)", background: "var(--bg)", color: "var(--text-h)" }}>
                   start
                 </button>
               )
             )
+          )}
+          {actionError && (
+            <span style={{ ...mono, fontSize: 9, color: "#fb7185" }}>{actionError}</span>
           )}
         </div>
         {isAdmin && !isRunning && (
@@ -492,21 +510,13 @@ export default function Runs() {
   const handleView = (runId) => setViewingRunId(runId);
 
   const handleStart = async (runId) => {
-    try {
-      await api.startRun(runId);
-      await refresh();
-    } catch (e) {
-      alert(`Failed to start run: ${e.message}`);
-    }
+    await api.startRun(runId);
+    await refresh();
   };
 
   const handleStop = async (runId) => {
-    try {
-      await api.stopRun(runId);
-      await refresh();
-    } catch (e) {
-      alert(`Failed to stop run: ${e.message}`);
-    }
+    await api.stopRun(runId);
+    await refresh();
   };
 
   const handleDelete = async () => {
