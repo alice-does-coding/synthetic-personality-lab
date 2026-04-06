@@ -408,7 +408,7 @@ export default function Runs() {
         <CreateRunModal onCreated={async () => { setCreating(false); await refresh(); }} onClose={() => setCreating(false)} />
       )}
 
-      <div style={{ display: "flex", height: "100%", minHeight: 0 }}>
+      <div style={{ display: "flex", minHeight: "calc(100svh - 120px)" }}>
         {/* ── Sidebar ── */}
         <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Sidebar header */}
