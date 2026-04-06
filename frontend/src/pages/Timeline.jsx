@@ -51,27 +51,30 @@ export default function Timeline() {
   const { viewingRunId, viewingRun, runningRunIds } = useRun();
   const isRunning = viewingRun && runningRunIds.includes(viewingRun.id);
 
-  const [posts,      setPosts]      = useState([]);
-  const [error,      setError]      = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [sortBy,     setSortBy]     = useState("latest");
-  const [trait,      setTrait]      = useState(TRAITS[4]);
-  const [page,       setPage]       = useState(1);
-  const [tickWindow, setTickWindow] = useState(null);
-  const [engType,    setEngType]    = useState(null);
-  const [lastRefresh, setLastRefresh] = useState(null);
+  const [posts,        setPosts]        = useState([]);
+  const [pending,      setPending]      = useState([]);
+  const [error,        setError]        = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [sortBy,       setSortBy]       = useState("latest");
+  const [trait,        setTrait]        = useState(TRAITS[4]);
+  const [page,         setPage]         = useState(1);
+  const [tickWindow,   setTickWindow]   = useState(null);
+  const [engType,      setEngType]      = useState(null);
+  const [lastRefresh,  setLastRefresh]  = useState(null);
 
-  const maxTick = viewingRun?.last_tick ?? 0;
-
+  const maxTick    = viewingRun?.last_tick ?? 0;
   const maxTickRef = useRef(maxTick);
   maxTickRef.current = maxTick;
+
+  // Track which post IDs are already in the list so background refreshes
+  // can identify truly new posts without replacing the whole array.
+  const knownIdsRef = useRef(new Set());
 
   const load = useCallback((resetPage = false) => {
     if (!viewingRunId) return;
     const tickMin = tickWindow != null
       ? Math.max(1, maxTickRef.current - tickWindow + 1)
       : undefined;
-    if (resetPage) setPage(1);
     api.listPosts({
       limit: 500,
       runId: viewingRunId,
@@ -79,8 +82,21 @@ export default function Timeline() {
       tickMin,
       engagementType: engType ?? undefined,
     })
-      .then((posts) => {
-        setPosts(posts);
+      .then((incoming) => {
+        if (resetPage) {
+          // Filter change or initial load — replace everything, reset pagination
+          knownIdsRef.current = new Set(incoming.map(p => p.id));
+          setPosts(incoming);
+          setPending([]);
+          setPage(1);
+        } else {
+          // Background refresh — buffer new posts, never touch the visible list
+          const newOnes = incoming.filter(p => !knownIdsRef.current.has(p.id));
+          if (newOnes.length > 0) {
+            newOnes.forEach(p => knownIdsRef.current.add(p.id));
+            setPending(prev => [...newOnes, ...prev]);
+          }
+        }
         setLastRefresh(new Date());
         setError(null);
       })
@@ -88,13 +104,13 @@ export default function Timeline() {
       .finally(() => setLoading(false));
   }, [viewingRunId, tickWindow, engType]);
 
-  // Reload + reset page when filters or run changes
+  // Reload + reset on filter/run changes
   useEffect(() => {
     setLoading(true);
     load(true);
   }, [load]);
 
-  // Auto-refresh without resetting page
+  // Background refresh — never resets page or replaces visible posts
   const intervalRef = useRef(null);
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -103,6 +119,11 @@ export default function Timeline() {
     }
     return () => clearInterval(intervalRef.current);
   }, [isRunning, load]);
+
+  const flushPending = () => {
+    setPosts(prev => [...pending, ...prev]);
+    setPending([]);
+  };
 
   const sorted = sortPosts(posts, sortBy, trait);
 
@@ -250,6 +271,20 @@ export default function Timeline() {
           {tickWindow != null && ` · last ${tickWindow} tick${tickWindow !== 1 ? "s" : ""}`}
         </span>
       </div>
+
+      {pending.length > 0 && (
+        <button
+          onClick={flushPending}
+          style={{
+            ...CTRL,
+            display: "flex", width: "100%", justifyContent: "center",
+            marginBottom: 12,
+            borderColor: "var(--pink)", color: "var(--pink)",
+          }}
+        >
+          ↑ {pending.length} new post{pending.length !== 1 ? "s" : ""}
+        </button>
+      )}
 
       {!loading && sorted.length === 0 && <p className="muted">no posts yet.</p>}
       {sorted.slice(0, page * PAGE_SIZE).map((p) => <PostCard key={p.id} post={p} />)}
