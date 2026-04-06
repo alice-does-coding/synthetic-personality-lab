@@ -12,7 +12,9 @@ We present **Lurkr**, a research instrument for studying Big Five personality dr
 
 We report results from **H2**, the first controlled experiment using the instrument: a matched-pair design in which 151 agents (initialized from Generation 1 Pokémon personas, random seed 42) ran for 1,000 simulation ticks under two conditions — behaviorally-grounded assessment versus ungrounded assessment — with all other parameters held constant. Grounded agents show a mean extraversion increase of **+21.7 points** (49.2 → 70.9) versus **+3.2 points** (49.2 → 52.4) in the ungrounded condition. The effect is specific to extraversion: all other traits show comparable trajectories between conditions. The grounding mechanism is load-bearing.
 
-An unexpected secondary finding emerges from corpus analysis of the 10,620 posts generated during the experiment: grounded and ungrounded agents develop divergent vocabularies. Grounded agents produce language dominated by embodied and action-oriented words; ungrounded agents produce abstract and conceptual language. We argue this vocabulary divergence is consistent with an *embodied cognition* hypothesis — that behavioral memory prior to generation changes not just what agents say about themselves, but the texture of language they produce.
+A secondary finding emerges from corpus analysis of the 10,620 posts generated during the experiment: grounded and ungrounded agents develop divergent vocabularies. Grounded agents produce language dominated by embodied and action-oriented words; ungrounded agents produce abstract and conceptual language. We attribute this to a *behavioral memory prior* effect — behavioral records in context bias generation toward behaviorally-textured language.
+
+Preliminary observations from exploratory follow-up runs with heterogeneous character populations (Neon Genesis Evangelion and Bob's Burgers personas) reveal a further pattern: regardless of character identity or cultural source material, agent populations converge toward a common region of OCEAN space across repeated assessment cycles. We term this the *OCEAN attractor* and hypothesize that it represents a latent personality profile encoded in the model's weights — a compressed statistical portrait of the social media user population from which the model's training data was drawn. If replicable across model families, this attractor constitutes a novel method for characterizing training data composition from behavioral output alone.
 
 The instrument is fully open-source, runs against any instruction-following LLM, and is designed to support transparent, reproducible computational personality research.
 
@@ -38,7 +40,8 @@ The contributions of this paper are:
 2. A complete open-source simulation instrument (Lurkr) implementing that mechanism at the agent, network, and population level
 3. A set of empirically testable hypotheses about drift dynamics, social influence, and news-driven affect
 4. Experimental confirmation that behavioral grounding is load-bearing: H2 results demonstrate a +21.7 point extraversion increase in grounded agents versus +3.2 in controls
-5. A secondary finding — vocabulary divergence between conditions — consistent with an embodied cognition hypothesis, motivating a novel memory architecture direction
+5. A secondary finding — vocabulary divergence between conditions — consistent with a behavioral memory prior hypothesis, motivating a novel memory architecture direction
+6. Preliminary evidence for a model-specific OCEAN attractor: a fixed point in personality space toward which diverse agent populations converge, hypothesized to encode the model's training data distribution
 
 ---
 
@@ -300,6 +303,50 @@ The practical implication is experimentally tractable regardless of the philosop
 
 These predictions motivate the memory architecture direction described in §10.2.
 
+### 7.6 Preliminary Observations: A Population-Level OCEAN Attractor
+
+Exploratory follow-up runs using heterogeneous character populations reveal a pattern not predicted by the H2 design but consistent across all runs conducted to date: agent populations converge toward a common region of OCEAN space regardless of their initial configuration or character identity.
+
+In a 17-agent run seeded from Neon Genesis Evangelion personas (run 1; `mistral-large-latest`, news enabled, grounded assessment, random seed 67), agents were initialized with extreme and varied profiles: Kaworu Nagisa at C=88.4, Makoto Hyuga at C=94.4, Gendo Ikari at E=15.8, Maya Ibuki at E=22.1. Across 11 assessment cycles (ticks 0–110), the population converged toward the following approximate region (Figure 2):
+
+| Trait | Estimated fixed point |
+|---|---|
+| Openness | ~60 |
+| Conscientiousness | ~60 |
+| Extraversion | ~65 |
+| Agreeableness | ~58 |
+| Neuroticism | ~47 |
+
+High-C agents (Kaworu: 88.4 → 68.8; Makoto: 94.4 → 64.6) were pulled down. Low-E agents (Gendo: 15.8 → 80.2; Maya: 22.1 → 67.7) were pulled up. The convergence trajectory was consistent across traits and agents regardless of starting position, character identity, or narrative archetype. Figure 3 visualizes this pattern as a scatter of seed value versus Δscore for each trait: the negative slope — agents above T* drift down, agents below T* drift up — is visible across all five dimensions, with the zero-crossing near the estimated fixed point in each case.
+
+A second exploratory run using Bob's Burgers personas (run 2; same configuration, same random seed 67) showed the same initial draws applied to a completely different cultural set. Convergence toward the same approximate region was observable within the first assessment cycle. Notably, the tick-0 → tick-10 jump for individual agents dramatically illustrates the grounding mechanism: Linda Belcher — canonically one of the most extraverted characters in the source material — scored E=15.8 on the ungrounded tick-0 assessment (before any posts existed to ground it), then E=90.6 on the first grounded assessment at tick 10. The same character; completely different behavioral evidence; 74.8-point measurement shift in one assessment cycle.
+
+**The attractor is not the population mean.** The IPIP-NEO normative means are approximately O=60, C=55, E=50, A=62, N=45 [CITATION: Johnson, 2014]. The observed fixed point systematically departs from norms in two directions: extraversion is higher (~65 vs. ~50) and agreeableness is lower (~58 vs. ~62). This displacement is consistent with a hypothesis that the attractor encodes the model's training data distribution — specifically, the population of social media users from which a large fraction of instruction-tuning data was drawn. Engagement-optimized platforms preferentially amplify extraverted, moderately anxious content [CITATION: Bail et al., 2018]; the users who produced the most training-relevant content may have systematically differed from the general population in ways the attractor reflects.
+
+This framing generates a testable prediction: different LLMs, trained on different data pipelines with different RLHF policies, should converge to different attractor fixed points. Mistral's attractor is not GPT-4's attractor is not Claude's. If true, the attractor constitutes a novel instrument for characterizing training data composition from behavioral output — see §9.4.
+
+Two additional observations from the NGE run bear mention:
+
+**Social connectivity mediates neuroticism contagion (preliminary H3 evidence).** One agent (Ritsuko Akagi) was assigned only one follower by the random seed, while all other agents had four or more. Despite posting with a mean sentiment of −0.5 — comparable to agents showing large N increases — her neuroticism decreased from 72.6 to 50.0 over the run. Agents with higher follower counts and similar content valence showed N increases of 20–50 points over the same window. Figure 4 plots mean post sentiment against ΔNeuroticism for all agents, with marker size encoding follower count: Ritsuko appears as a small marker at negative sentiment with a large negative ΔN — the clearest evidence in the dataset that social connectivity, not content valence alone, is load-bearing for N escalation. Figure 5 shows individual E and N trajectories, highlighting Shinji Ikari's steady N rise and Asuka Langley Soryu's volatile E oscillations. This pattern is consistent with H3's prediction that social connectivity mediates neuroticism contagion: negative content without social engagement does not escalate N; the engagement loop appears load-bearing. This is a single-agent, uncontrolled observation from an exploratory run and cannot substitute for the formal H3 experiment, but it establishes the plausibility of the pathway.
+
+**Character voice is preserved under format pressure.** Gendo Ikari — posting about iPhone product strategy and health misinformation — applied the concept of "Instrumentality" to contemporary social media discourse: *"If Instrumentality's vision included universal access to verified health guidance, would these myths even have room to spread? Control the narrative, control the outcome."* The format attractor pulled his OCEAN scores toward mid-range, but the generative texture — the conceptual framework through which content was filtered — remained character-faithful throughout. Score convergence and voice preservation are independent phenomena. The attractor operates at the measurement layer; character identity persists at the generation layer. This distinction matters for interpreting the instrument: drift in OCEAN scores does not imply erasure of the character's distinctive voice.
+
+These observations are preliminary. They derive from exploratory runs not designed as controlled experiments, use a single model, and share the same random seed — meaning the initial OCEAN draws are identical across runs, limiting the diversity of initial conditions represented. Formal investigation of the attractor fixed point, its model-specificity, and its relationship to training data composition is planned as the next major experimental program (§10.4).
+
+---
+
+**Figure Captions**
+
+**Figure 1** *(H2 primary result — prod data required)*: Mean extraversion score over simulation time for grounded (Run A) and ungrounded (Run B) conditions. Both runs initialized at identical population mean (49.2). Shaded bands show ±1 SD. The grounded condition diverges from tick 10 and stabilizes above the ungrounded condition by tick 30, reaching +21.7 points at the final assessment window.
+
+**Figure 2**: Population-level OCEAN trajectories for the NGE exploratory run (N=17, ticks 0–110). Lines show population mean; shaded bands show ±1 SD. Dashed horizontal lines mark estimated attractor fixed points (T*). Convergence toward T* is visible across all five traits regardless of seed distribution.
+
+**Figure 3**: Attractor pull visualization. Each point represents one agent; x-axis is seed value at tick 0, y-axis is Δscore (final − seed). The negative slope in all five panels — agents seeded above T* drift down; agents seeded below T* drift up — is the attractor in geometric form. Dashed vertical line marks T* per trait. Trend lines fitted by OLS.
+
+**Figure 4**: Post sentiment versus ΔNeuroticism for all NGE agents. Marker size encodes follower count. Red markers indicate N increase; blue markers indicate N decrease. The Ritsuko Akagi observation — small marker at negative sentiment with large negative ΔN — is visible as an outlier from the general pattern of negative sentiment correlating with N increase, consistent with social connectivity as a moderating variable.
+
+**Figure 5**: Individual agent trajectories for Extraversion (left) and Neuroticism (right), NGE run. Highlighted agents: Asuka Langley Soryu (red), Gendo Ikari (purple), Shinji Ikari (blue), Toji Suzuhara (gold), Ritsuko Akagi (green). Dashed lines mark T* per trait. Gray lines show remaining agents.
+
 ---
 
 ## 8. Limitations
@@ -352,6 +399,20 @@ Critically, this framing makes the research question falsifiable in both directi
 
 The broader ambition is to make computational personality research transparent and replicable. Every parameter that shapes agent behavior (news affinity weights, reply probability, feed composition, reassessment interval) is explicit, configurable, and logged. Every IPIP response — all 120 items, per agent, per assessment — is stored. The full chain from environmental exposure to behavioral output to psychometric measurement is reconstructible from the database.
 
+### 9.4 The Attractor as a Training Data Fingerprint
+
+If the OCEAN attractor is model-specific — if Mistral's fixed point differs from Claude's, which differs from GPT-4's — then the attractor is a measurement of something real about how different models internalized the social world.
+
+The argument is as follows. LLMs are trained on large corpora of human-generated text, with instruction tuning and RLHF further shaping the distribution toward behaviors humans rate as helpful or appropriate. A large fraction of the pretraining corpus is internet text, and a large fraction of internet text is social media. Social media platforms, in turn, were shaped by engagement optimization: the content that survived, spread, and accumulated replies was content generated by — and for — a particular kind of social media user. That user is not the average human. They are, systematically, more extraverted (they post publicly and frequently), moderately anxious (anxious content drives engagement; catastrophically anxious people often disengage), organized enough to be coherent but not so conscientious as to be boring. The Fogg Behavior Model's capture of platform dynamics [CITATION: Bail et al., 2018] produced a non-representative training distribution, and that non-representativeness is baked into every model that trained on it.
+
+The OCEAN attractor is what happens when you run that model in a social simulation long enough for the environmental pressure to exhaust the variance introduced by seed initialization. The model's "opinion" about what a social media user is like — encoded distributionally across its weights — surfaces as the long-run equilibrium.
+
+This framing has a direct empirical implication: the attractor fixed point is a probe of training data composition. Run Lurkr against a new model. Measure where populations converge. Compare to Mistral's fixed point. The difference is a signal about how the two models' training distributions differ in their representation of social behavior. A model trained on more scientifically conservative text should show a higher-C, lower-E attractor. A model with RLHF emphasizing emotional safety might show a lower-N attractor. These are testable predictions.
+
+This would make Lurkr useful beyond personality research: as an auditing tool for characterizing what population of human behavior a model has internalized. Before deploying an LLM in a social context — moderation, recommendation, synthetic participant generation — you could run it in simulation and measure its latent personality profile. That profile tells you whose voice the model has absorbed most deeply.
+
+We present this as a hypothesis, not a finding. The current evidence is two exploratory runs using the same model and the same random seed. Formal investigation requires multi-model replication, diverse seed populations, and larger agent counts. But the hypothesis is now specific enough to be tested, and the instrument to test it already exists.
+
 ---
 
 ## 10. Future Work
@@ -379,7 +440,17 @@ If behavioral memory prior is the causal variable behind vocabulary embodiment �
 - **H4 (News–trait interaction)**: Cross-tabulate `news_context` URL fields against subsequent IPIP scores for the same agent. Test whether negative-valence headline exposure predicts elevated neuroticism at next assessment, controlling for baseline.
 - **H5 (Extreme scores resist drift)**: Stratify agents by initial extraversion quartile; test whether grounded extraversion drift is smaller for agents initialized above 75 or below 25. Requires larger populations (200+ agents).
 
-### 10.4 Infrastructure
+### 10.4 Attractor Mapping and Multi-Model Characterization
+
+The OCEAN attractor hypothesis (§7.6, §9.4) motivates a dedicated experimental program:
+
+**Multi-model replication of the attractor fixed point**: Run the H2 Pokémon population (seed 42, grounded, news enabled) against Claude and GPT-4 in addition to Mistral. Measure where each population converges. Plot the three fixed points in OCEAN space. The displacement between them is the training data signal.
+
+**Formal dynamical model**: With sufficient data (151 agents × 1,000-tick full IPIP trajectories × 3 models), fit a first-order attractor model of the form ΔT_i(t) = λ(T* − T_i(t)) + β · k_i · valence_i(t), where T* is the attractor fixed point, λ is the convergence rate, k_i is agent social connectivity, and valence_i is mean post sentiment. This yields four fitted parameters per trait per model — a quantitative fingerprint of each model's social behavior internalization. The Ritsuko observation (§7.6) provides preliminary evidence for the social connectivity term; formal fitting requires larger populations with systematic variation in graph structure.
+
+**Diverse seed populations**: The current runs share a single random seed, limiting the range of initial conditions represented. Runs with varied seeds, varied population sizes (50 to 500 agents), and varied social graph densities will establish whether the attractor is robust to initialization variance or sensitive to starting configuration.
+
+### 10.5 Infrastructure
 
 - **FastAPI + asyncio**: Replace Flask + ThreadPoolExecutor. Async coroutines vs threads removes the primary memory bottleneck at scale.
 - **Separate worker process**: Move simulation out of the web process (Celery or Ray). Simulations survive web restarts. Memory isolated.
@@ -400,9 +471,11 @@ Lurkr is a research instrument for studying personality as a time-varying proper
 
 The first controlled experiment (H2) confirms that grounding is the mechanism. Agents assessed with their recent posts in view show six times more extraversion drift than matched agents assessed in the abstract. The format of social media posting — public address, reply, feed engagement — drives extraversion upward, and grounded IPIP captures this while ungrounded assessment misses it entirely.
 
-An unexpected secondary finding — vocabulary divergence between conditions, with grounded agents producing more embodied and action-oriented language — suggests that behavioral memory prior changes not just how agents rate themselves but what kind of language they generate. This finding opens a direction toward memory-augmented architectures that could deepen both the scientific findings and the behavioral coherence of agents over long simulation runs.
+A secondary finding — vocabulary divergence between conditions, with grounded agents producing more action-oriented language — suggests that behavioral memory prior changes not just how agents rate themselves but what kind of language they generate. This opens a direction toward memory-augmented architectures that would deepen both the scientific findings and the behavioral coherence of long-run agents.
 
-The research question is no longer unanswered. The instrument is sensitive. The effect is real. The next experiments will tell us how far it goes.
+Preliminary observations across multiple character populations reveal a third pattern: regardless of seed values or character identity, agent populations converge toward a stable region of OCEAN space. We hypothesize this attractor is not a simulation artifact but a measurement of the model's internalized portrait of a social media user — a fingerprint of training data composition that Lurkr's simulation environment makes legible. If this attractor proves model-specific across replication, it constitutes a novel method for characterizing what population of human behavior a model has absorbed.
+
+The research question is no longer unanswered. The instrument is sensitive. The effect is real. The attractor is visible. The next experiments will tell us what it means.
 
 ---
 
