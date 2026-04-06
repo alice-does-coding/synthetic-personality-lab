@@ -317,7 +317,7 @@ function CreateRunForm({ onCreated, onCancel }) {
           label="name pool (one per line)"
           value={form.name_pool_text}
           onChange={set("name_pool_text")}
-          placeholder={"Kim Jong-un\nVladimir Putin\nAlexander Lukashenko\n..."}
+          placeholder={"Dolly Parton\nDavid Bowie\nOctavia Butler\n..."}
           rows={4}
         />
         {form.name_pool_text.trim() && (
