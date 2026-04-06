@@ -1,56 +1,52 @@
 """
-Lurkr corpus analysis — three charts:
-  1. Word cloud: full post corpus, colored by agent's dominant OCEAN trait
-  2. News category correlation: financial-metaphor posts vs news category shown
-  3. Vocabulary comparison: top 50 words/bigrams, high-N (>65) vs low-N (<50) agents
+Lurkr corpus analysis — paper-ready figures.
 
-Run from backend/:
-  python corpus_analysis.py
+Usage:
+    # Single run: OCEAN trajectories, word cloud, vocabulary comparison
+    python corpus_analysis.py --run 6
 
-Requires: wordcloud matplotlib psycopg2-binary
+    # H2 comparison: drift comparison, agent trajectories, vocabulary diff
+    python corpus_analysis.py --compare 6 7
+
+Output: corpus_output/run_<id>/ or corpus_output/compare_<id1>_vs_<id2>/
+
+Reads DATABASE_URL from environment (set in .env). Works with SQLite locally
+or Postgres in production.
 """
 
+import argparse
+import os
 import re
 import sys
 from collections import Counter, defaultdict
+from pathlib import Path
 
-import psycopg2
-import psycopg2.extras
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-from wordcloud import WordCloud
-import plotly.graph_objects as go
+import matplotlib.ticker as mticker
+import numpy as np
 
-# ── DB ────────────────────────────────────────────────────────────────────────
+# ── Palette (matches Lurkr UI) ────────────────────────────────────────────────
 
-DB = dict(
-    host="dpg-d780cap5pdvs739h5u10-a.oregon-postgres.render.com",
-    user="lurkr_db_user",
-    password="gogUO0RhMX5CoyZJh9xnFClnKTK8vo8I",
-    dbname="lurkr_db",
-    port=5432,
-)
-
-# ── Constants ─────────────────────────────────────────────────────────────────
-
-OCEAN_COLORS = {
-    "neuroticism":       "#ff3ea5",  # pink
-    "openness":          "#c77dff",  # purple
-    "conscientiousness": "#2dd4bf",  # mint
-    "extraversion":      "#fb7185",  # rose
-    "agreeableness":     "#a78bfa",  # lavender
+TRAIT_COLORS = {
+    "openness":          "#c77dff",   # purple
+    "conscientiousness": "#2dd4bf",   # mint
+    "extraversion":      "#fb7185",   # rose
+    "agreeableness":     "#a78bfa",   # lavender
+    "neuroticism":       "#ff3ea5",   # pink
+}
+TRAITS = list(TRAIT_COLORS)
+TRAIT_LABELS = {
+    "openness":          "Openness",
+    "conscientiousness": "Conscientiousness",
+    "extraversion":      "Extraversion",
+    "agreeableness":     "Agreeableness",
+    "neuroticism":       "Neuroticism",
 }
 
-FINANCIAL_TERMS = {
-    "debt", "credit", "depreciation", "ledger", "contract", "interest",
-    "repossessed", "compounding", "balance", "sterling", "currency",
-    "invoice", "accrued", "iou", "account", "cost", "price", "trade",
-    "market", "asset", "liability", "equity", "dividend", "yield",
-    "liquidity", "portfolio", "hedge", "margin", "collateral", "default",
-    "amortize", "capitalize", "debit", "receivable", "payable",
-}
+GROUNDED_COLOR   = "#2dd4bf"   # teal — treatment
+UNGROUNDED_COLOR = "#ff3ea5"   # pink — control
 
 STOPWORDS = {
     "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
@@ -63,12 +59,95 @@ STOPWORDS = {
     "up", "about", "over", "after", "while", "every", "even", "still",
     "each", "through", "only", "also", "very", "much", "some", "any",
     "s", "t", "re", "ll", "ve", "m", "d",
-    # contraction artifacts (apostrophe stripped, then 't' removed as stopword)
     "doesn", "isn", "wasn", "aren", "weren", "couldn", "wouldn", "shouldn",
-    "hadn", "hasn", "haven", "didn", "don", "won", "can",
+    "hadn", "hasn", "haven", "didn", "don", "won",
 }
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Matplotlib style ──────────────────────────────────────────────────────────
+
+def apply_style():
+    plt.rcParams.update({
+        "figure.facecolor":     "#000000",
+        "axes.facecolor":       "#000000",
+        "axes.edgecolor":       "#333333",
+        "axes.labelcolor":      "#cccccc",
+        "axes.titlecolor":      "#ffffff",
+        "xtick.color":          "#888888",
+        "ytick.color":          "#888888",
+        "text.color":           "#cccccc",
+        "grid.color":           "#1e1e1e",
+        "grid.linewidth":       0.6,
+        "legend.facecolor":     "#0a0a0a",
+        "legend.edgecolor":     "#333333",
+        "legend.labelcolor":    "#cccccc",
+        "font.family":          "monospace",
+        "axes.spines.top":      False,
+        "axes.spines.right":    False,
+    })
+
+# ── DB helpers (via Flask / SQLAlchemy) ───────────────────────────────────────
+
+def get_app():
+    from app import create_app
+    return create_app()
+
+
+def fetch_snapshots(run_id):
+    """Return list of dicts: {tick_number, agent_id, name, O, C, E, A, N}"""
+    from models import PersonalitySnapshot, Agent
+    from database import db
+    rows = (
+        db.session.query(PersonalitySnapshot, Agent.name)
+        .join(Agent, Agent.id == PersonalitySnapshot.agent_id)
+        .filter(PersonalitySnapshot.run_id == run_id)
+        .order_by(PersonalitySnapshot.tick_number)
+        .all()
+    )
+    return [
+        {
+            "tick":    s.tick_number,
+            "agent_id": s.agent_id,
+            "name":    name,
+            "O": s.openness,
+            "C": s.conscientiousness,
+            "E": s.extraversion,
+            "A": s.agreeableness,
+            "N": s.neuroticism,
+        }
+        for s, name in rows
+    ]
+
+
+def fetch_posts(run_id):
+    """Return list of dicts with post content and author's current OCEAN scores."""
+    from models import Post, Agent
+    from database import db
+    rows = (
+        db.session.query(Post, Agent)
+        .join(Agent, Agent.id == Post.agent_id)
+        .filter(Post.run_id == run_id, Post.content.isnot(None))
+        .order_by(Post.tick_number)
+        .all()
+    )
+    return [
+        {
+            "content":     p.content,
+            "tick":        p.tick_number,
+            "handle":      a.handle,
+            "name":        a.name,
+            "O": a.openness, "C": a.conscientiousness,
+            "E": a.extraversion, "A": a.agreeableness, "N": a.neuroticism,
+        }
+        for p, a in rows
+    ]
+
+
+def fetch_run(run_id):
+    from models import Run
+    return Run.query.get_or_404(run_id)
+
+
+# ── Text helpers ──────────────────────────────────────────────────────────────
 
 def tokenize(text):
     text = text.lower()
@@ -78,56 +157,191 @@ def tokenize(text):
 
 
 def bigrams(tokens):
-    return [f"{tokens[i]}_{tokens[i+1]}" for i in range(len(tokens) - 1)]
+    return [f"{tokens[i]} {tokens[i+1]}" for i in range(len(tokens) - 1)]
 
 
 def dominant_trait(row):
-    traits = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"]
-    scores = {t: row[t] or 0 for t in traits}
+    scores = {t: row[t[0].upper()] or 0 for t in TRAITS}
     return max(scores, key=scores.get)
 
 
-# ── Fetch ─────────────────────────────────────────────────────────────────────
+# ── Mean trajectories ─────────────────────────────────────────────────────────
 
-def fetch_posts():
-    conn = psycopg2.connect(**DB)
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("""
-        SELECT
-            p.id,
-            p.content,
-            p.is_public,
-            p.engagement_type,
-            p.news_context,
-            p.tick_number,
-            a.handle,
-            a.neuroticism,
-            a.openness,
-            a.conscientiousness,
-            a.extraversion,
-            a.agreeableness
-        FROM posts p
-        JOIN agents a ON p.agent_id = a.id
-        WHERE p.content IS NOT NULL
-          AND a.neuroticism IS NOT NULL
-        ORDER BY p.tick_number
-    """)
-    rows = cur.fetchall()
-    conn.close()
-    print(f"Fetched {len(rows)} posts")
-    return rows
+def mean_trajectories(snapshots):
+    """
+    Returns dict: {tick -> {trait -> mean_score}},
+    and dict: {tick -> {trait -> std_score}}
+    """
+    from collections import defaultdict
+    by_tick = defaultdict(lambda: defaultdict(list))
+    for s in snapshots:
+        for t, key in [("openness","O"),("conscientiousness","C"),("extraversion","E"),("agreeableness","A"),("neuroticism","N")]:
+            if s[key] is not None:
+                by_tick[s["tick"]][t].append(s[key])
+    ticks = sorted(by_tick)
+    means = {tick: {t: np.mean(vals) for t, vals in by_tick[tick].items()} for tick in ticks}
+    stds  = {tick: {t: np.std(vals)  for t, vals in by_tick[tick].items()} for tick in ticks}
+    return ticks, means, stds
 
 
-# ── Chart 1: Word cloud ───────────────────────────────────────────────────────
+# ── Chart 1: OCEAN mean trajectories (single run) ────────────────────────────
 
-def build_word_cloud(rows):
-    # Collect word frequencies and per-word dominant trait vote
+def plot_ocean_trajectories(snapshots, run, outdir):
+    ticks, means, stds = mean_trajectories(snapshots)
+    xs = np.array(ticks)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor("#000000")
+
+    for trait in TRAITS:
+        ys  = np.array([means[t][trait] for t in ticks])
+        sds = np.array([stds[t][trait]  for t in ticks])
+        color = TRAIT_COLORS[trait]
+        ax.plot(xs, ys, color=color, linewidth=2, label=TRAIT_LABELS[trait])
+        ax.fill_between(xs, ys - sds, ys + sds, color=color, alpha=0.08)
+
+    ax.set_xlabel("tick", fontsize=10)
+    ax.set_ylabel("mean score (± 1 SD)", fontsize=10)
+    ax.set_title(f"OCEAN TRAJECTORIES — {run.name.upper()}", fontsize=12, pad=14)
+    ax.set_ylim(0, 105)
+    ax.axhline(50, color="#333333", linewidth=0.5, linestyle="--")
+    ax.grid(True, axis="y")
+    ax.legend(loc="upper right", fontsize=9, ncol=2)
+
+    fig.tight_layout()
+    path = outdir / "ocean_trajectories.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="#000000")
+    plt.close(fig)
+    print(f"  saved {path}")
+
+
+# ── Chart 2: H2 drift comparison (two runs) ───────────────────────────────────
+
+def plot_h2_comparison(snaps_a, snaps_b, run_a, run_b, outdir):
+    """
+    5-panel figure. Each panel = one trait. Two lines: grounded vs ungrounded.
+    Y axis = delta from tick-0 baseline (Δscore), so the shared starting point is always 0.
+    """
+    ticks_a, means_a, _ = mean_trajectories(snaps_a)
+    ticks_b, means_b, _ = mean_trajectories(snaps_b)
+
+    # Baseline at tick 0
+    base_a = means_a.get(0, {})
+    base_b = means_b.get(0, {})
+
+    label_a = "grounded (treatment)"   if run_a.ipip_grounded else "ungrounded (control)"
+    label_b = "ungrounded (control)"   if not run_b.ipip_grounded else "grounded (treatment)"
+    color_a = GROUNDED_COLOR   if run_a.ipip_grounded else UNGROUNDED_COLOR
+    color_b = UNGROUNDED_COLOR if run_a.ipip_grounded else GROUNDED_COLOR
+
+    fig, axes = plt.subplots(1, 5, figsize=(20, 5), sharey=False)
+    fig.patch.set_facecolor("#000000")
+    fig.suptitle(
+        f"H2 EXPERIMENT — GROUNDED vs UNGROUNDED IPIP\n"
+        f"{run_a.name}  ·  {run_b.name}  ·  seed {run_a.random_seed}  ·  {len(ticks_a)} assessment cycles",
+        fontsize=11, y=1.02, color="#ffffff",
+    )
+
+    for ax, trait in zip(axes, TRAITS):
+        xs_a = np.array(ticks_a)
+        xs_b = np.array(ticks_b)
+        ys_a = np.array([means_a[t][trait] - base_a.get(trait, 0) for t in ticks_a])
+        ys_b = np.array([means_b[t][trait] - base_b.get(trait, 0) for t in ticks_b])
+
+        ax.axhline(0, color="#444444", linewidth=0.8, linestyle="--")
+        ax.plot(xs_a, ys_a, color=color_a, linewidth=2, label=label_a)
+        ax.plot(xs_b, ys_b, color=color_b, linewidth=2, label=label_b)
+
+        ax.set_title(TRAIT_LABELS[trait], fontsize=10, color=TRAIT_COLORS[trait], pad=8)
+        ax.set_xlabel("tick", fontsize=8)
+        if ax is axes[0]:
+            ax.set_ylabel("Δ score from baseline", fontsize=8)
+        ax.grid(True, axis="y")
+        ax.tick_params(labelsize=8)
+
+    # Shared legend below
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2, fontsize=9,
+               bbox_to_anchor=(0.5, -0.06), framealpha=0.8)
+
+    fig.tight_layout()
+    path = outdir / "h2_drift_comparison.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="#000000")
+    plt.close(fig)
+    print(f"  saved {path}")
+
+
+# ── Chart 3: Agent-level E trajectories (compare mode) ───────────────────────
+
+def plot_agent_extraversion(snaps_a, snaps_b, run_a, run_b, outdir):
+    """
+    Two panels side by side. Each agent = one thin line. Population mean = thick line.
+    Shows individual variation in E drift within each condition.
+    """
+    from collections import defaultdict
+
+    def by_agent(snapshots):
+        d = defaultdict(list)
+        for s in snapshots:
+            d[s["name"]].append((s["tick"], s["E"]))
+        return {name: sorted(pts) for name, pts in d.items()}
+
+    agents_a = by_agent(snaps_a)
+    agents_b = by_agent(snaps_b)
+    ticks_a, means_a, _ = mean_trajectories(snaps_a)
+    ticks_b, means_b, _ = mean_trajectories(snaps_b)
+
+    label_a = "grounded" if run_a.ipip_grounded else "ungrounded"
+    label_b = "ungrounded" if run_a.ipip_grounded else "grounded"
+    color_a = GROUNDED_COLOR if run_a.ipip_grounded else UNGROUNDED_COLOR
+    color_b = UNGROUNDED_COLOR if run_a.ipip_grounded else GROUNDED_COLOR
+
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(16, 7), sharey=True)
+    fig.patch.set_facecolor("#000000")
+    fig.suptitle("EXTRAVERSION DRIFT — AGENT-LEVEL TRAJECTORIES", fontsize=12, y=1.01, color="#ffffff")
+
+    for ax, agents, ticks, means, color, label in [
+        (ax_a, agents_a, ticks_a, means_a, color_a, label_a),
+        (ax_b, agents_b, ticks_b, means_b, color_b, label_b),
+    ]:
+        for pts in agents.values():
+            xs, ys = zip(*pts)
+            ax.plot(xs, ys, color=color, linewidth=0.4, alpha=0.2)
+
+        # Population mean
+        mean_e = [means[t]["extraversion"] for t in ticks]
+        ax.plot(ticks, mean_e, color=color, linewidth=2.5, label=f"mean ({label})", zorder=5)
+
+        ax.axhline(50, color="#333333", linewidth=0.5, linestyle="--")
+        ax.set_ylim(0, 105)
+        ax.set_xlabel("tick", fontsize=10)
+        ax.set_ylabel("extraversion score", fontsize=10)
+        ax.set_title(label.upper(), fontsize=11, color=color, pad=10)
+        ax.grid(True, axis="y")
+        ax.legend(fontsize=9)
+
+    fig.tight_layout()
+    path = outdir / "h2_extraversion_agents.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="#000000")
+    plt.close(fig)
+    print(f"  saved {path}")
+
+
+# ── Chart 4: Word cloud ───────────────────────────────────────────────────────
+
+def plot_wordcloud(posts, run, outdir):
+    try:
+        from wordcloud import WordCloud
+    except ImportError:
+        print("  wordcloud not installed — skipping word cloud")
+        return
+
     word_freq = Counter()
     word_trait_votes = defaultdict(Counter)
 
-    for row in rows:
-        trait = dominant_trait(row)
-        tokens = tokenize(row["content"])
+    for p in posts:
+        tokens = tokenize(p["content"])
+        trait = dominant_trait(p)
         for w in tokens:
             word_freq[w] += 1
             word_trait_votes[w][trait] += 1
@@ -136,310 +350,208 @@ def build_word_cloud(rows):
         votes = word_trait_votes.get(word, {})
         if not votes:
             return "#ffffff"
-        top = max(votes, key=votes.get)
-        return OCEAN_COLORS[top]
+        return TRAIT_COLORS[max(votes, key=votes.get)]
 
     wc = WordCloud(
-        width=1600,
-        height=800,
+        width=1600, height=800,
         background_color="#000000",
         max_words=200,
         color_func=color_func,
         prefer_horizontal=0.8,
-        font_path=None,
     ).generate_from_frequencies(word_freq)
 
     fig, ax = plt.subplots(figsize=(16, 8), facecolor="#000000")
     ax.imshow(wc, interpolation="bilinear")
     ax.axis("off")
 
-    # Legend
-    for trait, color in OCEAN_COLORS.items():
-        ax.plot([], [], "s", color=color, label=trait, markersize=10)
-    ax.legend(
-        loc="lower right",
-        facecolor="#111111",
-        edgecolor="#333333",
-        labelcolor="white",
-        fontsize=10,
-        framealpha=0.8,
-    )
-
+    for trait, color in TRAIT_COLORS.items():
+        ax.plot([], [], "s", color=color, label=TRAIT_LABELS[trait], markersize=9)
+    ax.legend(loc="lower right", fontsize=9, framealpha=0.8)
     ax.set_title(
-        "LURKR CORPUS — WORD CLOUD (colored by agent dominant OCEAN trait)",
-        color="white",
-        fontsize=13,
-        pad=12,
-        fontfamily="monospace",
+        f"POST CORPUS — WORD CLOUD  ·  {run.name.upper()}  ·  {len(posts)} posts",
+        color="white", fontsize=12, pad=12,
     )
-    fig.tight_layout()
-    fig.savefig("corpus_wordcloud.png", dpi=150, bbox_inches="tight", facecolor="#000000")
-    plt.close(fig)
-    print("Saved corpus_wordcloud.png")
-
-
-# ── Chart 2: News category vs financial metaphor ──────────────────────────────
-
-def build_news_correlation(rows):
-    category_counts = Counter()
-    category_financial = Counter()
-
-    for row in rows:
-        nc = row["news_context"]
-        if not nc:
-            continue
-        # news_context is a list of headline dicts with 'category' key
-        categories = set()
-        if isinstance(nc, list):
-            for item in nc:
-                if isinstance(item, dict) and item.get("category"):
-                    categories.add(item["category"].upper())
-        elif isinstance(nc, dict) and nc.get("category"):
-            categories.add(nc["category"].upper())
-
-        tokens = set(tokenize(row["content"]))
-        has_financial = bool(tokens & FINANCIAL_TERMS)
-
-        for cat in categories:
-            category_counts[cat] += 1
-            if has_financial:
-                category_financial[cat] += 1
-
-    if not category_counts:
-        print("No news_context data found — skipping chart 2")
-        return
-
-    cats = sorted(category_counts, key=category_counts.get, reverse=True)[:12]
-    total = [category_counts[c] for c in cats]
-    financial = [category_financial.get(c, 0) for c in cats]
-    pct = [f / t * 100 if t else 0 for f, t in zip(financial, total)]
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), facecolor="#000000")
-
-    x = range(len(cats))
-    ax1.bar(x, total, color="#333333", label="all posts with this news category")
-    ax1.bar(x, financial, color="#ff3ea5", label="posts with financial metaphors")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(cats, rotation=30, ha="right", color="white", fontfamily="monospace", fontsize=9)
-    ax1.set_facecolor("#000000")
-    ax1.tick_params(colors="white")
-    ax1.set_title("NEWS CATEGORY vs FINANCIAL METAPHOR POSTS", color="white", fontfamily="monospace", fontsize=11)
-    ax1.legend(facecolor="#111111", edgecolor="#333333", labelcolor="white", fontsize=9)
-    for spine in ax1.spines.values():
-        spine.set_edgecolor("#333333")
-
-    ax2.bar(x, pct, color="#c77dff")
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(cats, rotation=30, ha="right", color="white", fontfamily="monospace", fontsize=9)
-    ax2.set_ylabel("% financial metaphor", color="white", fontfamily="monospace")
-    ax2.set_facecolor("#000000")
-    ax2.tick_params(colors="white")
-    ax2.set_title("FINANCIAL METAPHOR RATE BY NEWS CATEGORY", color="white", fontfamily="monospace", fontsize=11)
-    for spine in ax2.spines.values():
-        spine.set_edgecolor("#333333")
 
     fig.tight_layout()
-    fig.savefig("corpus_news_correlation.png", dpi=150, bbox_inches="tight", facecolor="#000000")
+    path = outdir / "wordcloud.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="#000000")
     plt.close(fig)
-    print("Saved corpus_news_correlation.png")
+    print(f"  saved {path}")
 
 
-# ── Chart 3: Vocabulary comparison high-N vs low-N ───────────────────────────
+# ── Chart 5: Vocabulary comparison high-N vs low-N (single run) ──────────────
 
-def build_vocab_comparison(rows):
-    high_n = Counter()
-    low_n = Counter()
-    high_n_bi = Counter()
-    low_n_bi = Counter()
+def plot_vocab_comparison(posts, run, outdir):
+    high_n = Counter(); low_n = Counter()
+    high_bi = Counter(); low_bi = Counter()
 
-    for row in rows:
-        tokens = tokenize(row["content"])
+    for p in posts:
+        tokens = tokenize(p["content"])
         bis = bigrams(tokens)
-        n = row["neuroticism"] or 0
+        n = p["N"] or 0
         if n >= 65:
-            high_n.update(tokens)
-            high_n_bi.update(bis)
+            high_n.update(tokens); high_bi.update(bis)
         elif n <= 50:
-            low_n.update(tokens)
-            low_n_bi.update(bis)
+            low_n.update(tokens);  low_bi.update(bis)
 
-    top_n = 30
-
-    # Combine unigrams + bigrams, pick top
-    def top_combined(uni, bi, n):
-        combined = Counter()
-        combined.update(uni)
+    def top_combined(uni, bi, n=30):
+        combined = Counter(uni)
         combined.update({k: v for k, v in bi.items() if v >= 3})
         return combined.most_common(n)
 
-    high_top = top_combined(high_n, high_n_bi, top_n)
-    low_top = top_combined(low_n, low_n_bi, top_n)
+    high_top = top_combined(high_n, high_bi)
+    low_top  = top_combined(low_n,  low_bi)
 
-    fig, (ax_high, ax_low) = plt.subplots(1, 2, figsize=(18, 10), facecolor="#000000")
+    fig, (ax_h, ax_l) = plt.subplots(1, 2, figsize=(18, 10), facecolor="#000000")
+    fig.suptitle(
+        f"VOCABULARY COMPARISON — HIGH-N vs LOW-N  ·  {run.name.upper()}",
+        color="white", fontsize=13, y=1.01,
+    )
 
-    def draw_bar(ax, data, color, title):
-        words, counts = zip(*data) if data else ([], [])
-        words = [w.replace("_", " ") for w in words]
+    def draw(ax, data, color, title):
+        if not data:
+            ax.text(0.5, 0.5, "no data", ha="center", va="center", transform=ax.transAxes)
+            return
+        words, counts = zip(*data)
         y = range(len(words))
         ax.barh(y, counts, color=color, height=0.7)
         ax.set_yticks(y)
-        ax.set_yticklabels(words, fontfamily="monospace", fontsize=9, color="white")
+        ax.set_yticklabels(words, fontsize=9)
         ax.invert_yaxis()
-        ax.set_facecolor("#000000")
-        ax.tick_params(colors="white")
-        ax.set_title(title, color="white", fontfamily="monospace", fontsize=11, pad=10)
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#333333")
-        ax.xaxis.label.set_color("white")
+        ax.set_title(title, fontsize=11, pad=10)
+        ax.grid(True, axis="x")
 
-    draw_bar(ax_high, high_top, "#ff3ea5", f"HIGH NEUROTICISM (≥65)\ntop {top_n} words & bigrams")
-    draw_bar(ax_low,  low_top,  "#2dd4bf", f"LOW NEUROTICISM (≤50)\ntop {top_n} words & bigrams")
+    draw(ax_h, high_top, TRAIT_COLORS["neuroticism"],       f"HIGH NEUROTICISM (≥65)\ntop 30 terms")
+    draw(ax_l, low_top,  TRAIT_COLORS["conscientiousness"], f"LOW NEUROTICISM (≤50)\ntop 30 terms")
 
-    fig.suptitle(
-        "VOCABULARY COMPARISON — HIGH-N vs LOW-N AGENTS",
-        color="white", fontfamily="monospace", fontsize=13, y=1.01,
-    )
     fig.tight_layout()
-    fig.savefig("corpus_vocab_comparison.png", dpi=150, bbox_inches="tight", facecolor="#000000")
+    path = outdir / "vocab_comparison.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="#000000")
     plt.close(fig)
-    print("Saved corpus_vocab_comparison.png")
-
-    # Print WSB fingerprint check
-    wsb_terms = {"moon", "diamond", "hold", "hodl", "ape", "bull", "bear", "rocket",
-                 "dip", "tendies", "yolo", "squeeze", "short", "calls", "puts", "stonk"}
-    found = {w for w, _ in high_top if w in wsb_terms or w.replace(" ", "_") in wsb_terms}
-    if found:
-        print(f"\nWSB terms in high-N vocabulary: {found}")
-    else:
-        print("\nNo direct WSB terms in top high-N vocabulary — check bigrams manually")
+    print(f"  saved {path}")
 
 
-# ── Chart 4: Interactive word frequency over time ─────────────────────────────
+# ── Chart 6: Vocabulary diff between two runs ─────────────────────────────────
 
-def build_word_timeline(rows, top_n=25):
+def plot_vocab_diff(posts_a, posts_b, run_a, run_b, outdir):
     """
-    Interactive Plotly line chart — cumulative word frequency per tick.
-    Top N words from the full corpus, one line each, colored by dominant OCEAN trait.
-    Animated play button lets you watch the vocabulary lock in over time.
+    Words that appear disproportionately in grounded vs ungrounded corpus.
+    Log-odds ratio — highlights what the grounded condition generates differently.
     """
-    # Find top N words across full corpus first
-    full_freq = Counter()
-    for row in rows:
-        full_freq.update(tokenize(row["content"]))
-    top_words = [w for w, _ in full_freq.most_common(top_n)]
+    freq_a = Counter(w for p in posts_a for w in tokenize(p["content"]))
+    freq_b = Counter(w for p in posts_b for w in tokenize(p["content"]))
 
-    # Build per-tick frequency (rolling window of 5 ticks to smooth noise)
-    WINDOW = 5
-    ticks_seen = sorted(set(row["tick_number"] for row in rows))
-    tick_data = {}  # tick -> {word: count within window}
+    total_a = sum(freq_a.values()) or 1
+    total_b = sum(freq_b.values()) or 1
+    vocab = set(freq_a) | set(freq_b)
 
-    rows_by_tick = defaultdict(list)
-    for row in rows:
-        rows_by_tick[row["tick_number"]].append(row)
+    # Log-odds with Laplace smoothing
+    log_odds = {}
+    for w in vocab:
+        pa = (freq_a.get(w, 0) + 1) / (total_a + len(vocab))
+        pb = (freq_b.get(w, 0) + 1) / (total_b + len(vocab))
+        log_odds[w] = np.log(pa / pb)
 
-    for i, tick in enumerate(ticks_seen):
-        window_ticks = ticks_seen[max(0, i - WINDOW + 1): i + 1]
-        window_counts = Counter()
-        for t in window_ticks:
-            for row in rows_by_tick[t]:
-                window_counts.update(tokenize(row["content"]))
-        tick_data[tick] = {w: window_counts[w] for w in top_words}
+    sorted_words = sorted(log_odds, key=log_odds.get)
+    top_b = sorted_words[:20]    # more in run_b (ungrounded)
+    top_a = sorted_words[-20:]   # more in run_a (grounded)
+    top_a.reverse()
 
-    # Assign color per word by which OCEAN trait's agents use it most
-    word_trait_votes = defaultdict(Counter)
-    for row in rows:
-        trait = dominant_trait(row)
-        for w in tokenize(row["content"]):
-            if w in set(top_words):
-                word_trait_votes[w][trait] += 1
+    label_a = "grounded" if run_a.ipip_grounded else "ungrounded"
+    label_b = "ungrounded" if run_a.ipip_grounded else "grounded"
+    color_a = GROUNDED_COLOR if run_a.ipip_grounded else UNGROUNDED_COLOR
+    color_b = UNGROUNDED_COLOR if run_a.ipip_grounded else GROUNDED_COLOR
 
-    def word_color(word):
-        votes = word_trait_votes.get(word, {})
-        if not votes:
-            return "#ffffff"
-        return OCEAN_COLORS[max(votes, key=votes.get)]
-
-    # Build Plotly figure
-    fig = go.Figure()
-
-    for word in top_words:
-        y_vals = [tick_data[t][word] for t in ticks_seen]
-        fig.add_trace(go.Scatter(
-            x=list(ticks_seen),
-            y=y_vals,
-            mode="lines",
-            name=word,
-            line=dict(color=word_color(word), width=2),
-            hovertemplate=f"<b>{word}</b><br>tick: %{{x}}<br>count: %{{y}}<extra></extra>",
-        ))
-
-    fig.update_layout(
-        title=dict(
-            text="LURKR CORPUS — WORD FREQUENCY OVER TIME (5-tick rolling window)",
-            font=dict(family="monospace", size=16, color="#ffffff"),
-        ),
-        paper_bgcolor="#000000",
-        plot_bgcolor="#000000",
-        font=dict(family="monospace", color="#ffffff"),
-        xaxis=dict(
-            title="tick",
-            gridcolor="#222222",
-            color="#ffffff",
-            tickfont=dict(family="monospace"),
-        ),
-        yaxis=dict(
-            title="frequency (5-tick rolling window)",
-            gridcolor="#222222",
-            color="#ffffff",
-            tickfont=dict(family="monospace"),
-        ),
-        legend=dict(
-            bgcolor="#111111",
-            bordercolor="#333333",
-            borderwidth=1,
-            font=dict(family="monospace", size=10),
-        ),
-        hovermode="x unified",
-        hoverlabel=dict(
-            bgcolor="#111111",
-            bordercolor="#333333",
-            font=dict(family="monospace", color="#ffffff"),
-        ),
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(16, 8), facecolor="#000000")
+    fig.suptitle(
+        f"VOCABULARY DIVERGENCE — {label_a.upper()} vs {label_b.upper()}\n"
+        f"log-odds ratio (higher = more characteristic of that condition)",
+        color="white", fontsize=12, y=1.02,
     )
 
-    # Annotation for key moments
-    fig.add_annotation(
-        x=ticks_seen[len(ticks_seen)//10],
-        y=full_freq[top_words[0]] * 0.1,
-        text="attractor lock-in zone",
-        showarrow=False,
-        font=dict(family="monospace", color="#555555", size=10),
-    )
+    def draw(ax, words, color, title):
+        vals = [log_odds[w] for w in words]
+        y = range(len(words))
+        ax.barh(y, [abs(v) for v in vals], color=color, height=0.7)
+        ax.set_yticks(y)
+        ax.set_yticklabels(words, fontsize=9)
+        ax.invert_yaxis()
+        ax.set_title(title, fontsize=10, pad=10, color=color)
+        ax.set_xlabel("log-odds (abs)", fontsize=8)
+        ax.grid(True, axis="x")
 
-    fig.write_html(
-        "corpus_word_timeline.html",
-        include_plotlyjs="cdn",
-        config={"displayModeBar": True, "scrollZoom": True},
-    )
-    print("Saved corpus_word_timeline.html")
+    draw(ax_a, top_a, color_a, f"more in {label_a}")
+    draw(ax_b, top_b, color_b, f"more in {label_b}")
+
+    fig.tight_layout()
+    path = outdir / "vocab_divergence.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="#000000")
+    plt.close(fig)
+    print(f"  saved {path}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def main():
+    parser = argparse.ArgumentParser(description="Lurkr corpus analysis — paper-ready figures")
+    group  = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--run",     type=int, metavar="RUN_ID",
+                       help="single run analysis")
+    group.add_argument("--compare", type=int, nargs=2, metavar=("RUN_A", "RUN_B"),
+                       help="H2 comparison between two matched runs")
+    args = parser.parse_args()
+
+    apply_style()
+    app = get_app()
+
+    with app.app_context():
+        if args.run:
+            run_id = args.run
+            run = fetch_run(run_id)
+            outdir = Path("corpus_output") / f"run_{run_id}"
+            outdir.mkdir(parents=True, exist_ok=True)
+            print(f"\nRun {run_id}: {run.name}  ({run.status}, tick {run.last_tick})")
+
+            print("\nFetching data...")
+            snapshots = fetch_snapshots(run_id)
+            posts     = fetch_posts(run_id)
+            print(f"  {len(snapshots)} snapshots, {len(posts)} posts")
+
+            print("\nGenerating figures...")
+            plot_ocean_trajectories(snapshots, run, outdir)
+            plot_wordcloud(posts, run, outdir)
+            plot_vocab_comparison(posts, run, outdir)
+
+            print(f"\nDone. Output: {outdir}/")
+
+        else:
+            id_a, id_b = args.compare
+            outdir = Path("corpus_output") / f"compare_{id_a}_vs_{id_b}"
+            outdir.mkdir(parents=True, exist_ok=True)
+
+            run_a = fetch_run(id_a)
+            run_b = fetch_run(id_b)
+            print(f"\nRun {id_a}: {run_a.name}  (grounded={run_a.ipip_grounded}, seed={run_a.random_seed})")
+            print(f"Run {id_b}: {run_b.name}  (grounded={run_b.ipip_grounded}, seed={run_b.random_seed})")
+
+            if run_a.random_seed != run_b.random_seed:
+                print("WARNING: runs have different random seeds — not a matched pair")
+
+            print("\nFetching data...")
+            snaps_a  = fetch_snapshots(id_a)
+            snaps_b  = fetch_snapshots(id_b)
+            posts_a  = fetch_posts(id_a)
+            posts_b  = fetch_posts(id_b)
+            print(f"  Run {id_a}: {len(snaps_a)} snapshots, {len(posts_a)} posts")
+            print(f"  Run {id_b}: {len(snaps_b)} snapshots, {len(posts_b)} posts")
+
+            print("\nGenerating figures...")
+            plot_h2_comparison(snaps_a, snaps_b, run_a, run_b, outdir)
+            plot_agent_extraversion(snaps_a, snaps_b, run_a, run_b, outdir)
+            plot_vocab_diff(posts_a, posts_b, run_a, run_b, outdir)
+
+            print(f"\nDone. Output: {outdir}/")
+
+
 if __name__ == "__main__":
-    print("Connecting to prod DB...")
-    rows = fetch_posts()
-
-    print("\n[1/3] Building word cloud...")
-    build_word_cloud(rows)
-
-    print("\n[2/3] Building news correlation chart...")
-    build_news_correlation(rows)
-
-    print("\n[3/3] Building vocabulary comparison...")
-    build_vocab_comparison(rows)
-
-    print("\n[4/4] Building interactive word timeline...")
-    build_word_timeline(rows)
-
-    print("\nDone. Open corpus_wordcloud.png, corpus_news_correlation.png, corpus_vocab_comparison.png, corpus_word_timeline.html")
+    main()
