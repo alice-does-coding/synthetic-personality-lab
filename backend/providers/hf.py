@@ -88,9 +88,9 @@ def chat(messages, max_tokens, temperature, model):
             logger.error(msg)
             raise LLMAuthError(msg)
 
-        if resp.status_code == 422:
-            logger.error("HF 422 — invalid request payload for %s: %s", model, resp.text[:300])
-            raise RuntimeError(f"HF 422 invalid request: {resp.text[:200]}")
+        if resp.status_code in (400, 422):
+            logger.error("HF %d — bad request for model %s: %s", resp.status_code, model, resp.text[:500])
+            raise RuntimeError(f"HF {resp.status_code} bad request: {resp.text[:300]}")
 
         if resp.status_code == 429:
             if attempt < max_retries - 1:
@@ -110,5 +110,6 @@ def chat(messages, max_tokens, temperature, model):
                 continue
             resp.raise_for_status()
 
-        # Any other non-2xx
+        # Any other non-2xx — log body before raising so we can diagnose
+        logger.error("HF %d error for model %s: %s", resp.status_code, model, resp.text[:500])
         resp.raise_for_status()
