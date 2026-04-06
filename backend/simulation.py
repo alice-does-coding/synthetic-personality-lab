@@ -281,8 +281,9 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent_id = futures[future]
                     try:
                         ipip_results[agent_id] = future.result()
-                    except Exception:
-                        logger.exception("IPIP assessment failed for agent %d", agent_id)
+                    except Exception as exc:
+                        logger.error("IPIP assessment failed for agent %d: %s: %s",
+                                     agent_id, type(exc).__name__, exc)
             ipip_s = time.monotonic() - ipip_start
 
             db_start = time.monotonic()
