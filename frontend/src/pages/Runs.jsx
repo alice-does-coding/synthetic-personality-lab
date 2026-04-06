@@ -112,8 +112,12 @@ const PROVIDER_MODELS = {
     { value: "open-mistral-nemo",    label: "mistral-nemo"  },
   ],
   hf: [
-    { value: "Qwen/Qwen2.5-72B-Instruct",   label: "Qwen 2.5 72B"  },
-    { value: "Qwen/Qwen2.5-7B-Instruct",    label: "Qwen 2.5 7B"   },
+    { value: "Qwen/Qwen2.5-72B-Instruct",          label: "Qwen 2.5 72B"       },
+    { value: "Qwen/Qwen2.5-7B-Instruct",           label: "Qwen 2.5 7B"        },
+    { value: "meta-llama/Llama-3.3-70B-Instruct",  label: "Llama 3.3 70B"      },
+    { value: "meta-llama/Llama-3.1-8B-Instruct",   label: "Llama 3.1 8B"       },
+    { value: "deepseek-ai/DeepSeek-V3-0324",        label: "DeepSeek V3"        },
+    { value: "deepseek-ai/DeepSeek-R1",             label: "DeepSeek R1"        },
   ],
 };
 
