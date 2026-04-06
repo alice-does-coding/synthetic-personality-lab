@@ -19,7 +19,7 @@ _rl_next = 0.0  # monotonic time when next call is allowed
 # bail immediately without making HTTP calls or logging duplicate errors.
 _auth_failed = threading.Event()
 
-HF_INFERENCE_URL = "https://router.huggingface.co/hf-inference/v1/chat/completions"
+HF_INFERENCE_URL = "https://router.huggingface.co/v1/chat/completions"
 
 
 def reset_auth():
