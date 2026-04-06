@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { api } from "../api";
 import { useRun } from "../RunContext";
 import { useAdmin } from "../AdminContext";
@@ -256,6 +256,57 @@ function CreateRunModal({ onCreated, onClose }) {
   );
 }
 
+const LEVEL_COLOR = { info: "var(--text-dim)", warning: "#fb923c", error: "#fb7185" };
+
+function RunLog({ runId, isRunning }) {
+  const [events, setEvents] = useState([]);
+  const bottomRef = useRef(null);
+
+  const load = () => api.getRunEvents(runId).then(setEvents).catch(() => {});
+
+  useEffect(() => { setEvents([]); load(); }, [runId]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
+  }, [isRunning, runId]);
+
+  // Auto-scroll to bottom when new events arrive
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [events.length]);
+
+  if (events.length === 0) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 0, borderTop: "1px solid var(--border)" }}>
+      <div style={{ ...mono, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-dim)", padding: "12px 0 6px" }}>
+        run log
+      </div>
+      <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 0 }}>
+        {events.map(e => (
+          <div key={e.id} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "3px 0", borderBottom: "1px solid var(--border)" }}>
+            <span style={{ ...mono, fontSize: 9, color: "var(--text-dim)", flexShrink: 0, width: 36, textAlign: "right" }}>
+              {e.tick != null ? `t${e.tick}` : "—"}
+            </span>
+            <span style={{ ...mono, fontSize: 9, fontWeight: 700, color: LEVEL_COLOR[e.level] ?? "var(--text-dim)", flexShrink: 0, width: 42 }}>
+              {e.level}
+            </span>
+            <span style={{ ...mono, fontSize: 10, color: "var(--text)", lineHeight: 1.5, flex: 1 }}>
+              {e.message}
+            </span>
+            <span style={{ ...mono, fontSize: 9, color: "var(--text-dim)", flexShrink: 0 }}>
+              {new Date(e.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
+}
+
 // ── Run detail panel ──────────────────────────────────────────────────────────
 function RunDetail({ run, isRunning, isAdmin, onStart, onStop, onDeleteRequest }) {
   const [pending, setPending] = useState(null);
@@ -337,20 +388,15 @@ function RunDetail({ run, isRunning, isAdmin, onStart, onStop, onDeleteRequest }
         {run.ended_at          && <FIELD label="ended"      value={new Date(run.ended_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} />}
       </div>
 
-      {/* Error */}
-      {run.error && (
-        <div style={{ ...mono, fontSize: 11, color: "#fb7185", lineHeight: 1.6, padding: "10px 14px", border: "1px solid #fb7185", background: "rgba(251,113,133,0.05)" }}>
-          <span style={{ fontWeight: 700, display: "block", marginBottom: 4, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em" }}>failure reason</span>
-          {run.error}
-        </div>
-      )}
-
       {/* Notes */}
       {run.notes && (
         <div style={{ ...mono, fontSize: 12, color: "var(--text)", lineHeight: 1.7 }}>
           {run.notes}
         </div>
       )}
+
+      {/* Run log */}
+      <RunLog runId={run.id} isRunning={isRunning} />
 
       {/* Actions */}
       {isAdmin && (

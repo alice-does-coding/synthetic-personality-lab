@@ -43,6 +43,7 @@ class Run(db.Model):
     news_items         = db.relationship("NewsItem",            backref="run", lazy=True, cascade="all, delete-orphan")
     personality_snapshots = db.relationship("PersonalitySnapshot", backref="run", lazy=True, cascade="all, delete-orphan")
     ipip_responses     = db.relationship("IpipResponse",        backref="run", lazy=True, cascade="all, delete-orphan")
+    events             = db.relationship("RunEvent",            backref="run", lazy=True, cascade="all, delete-orphan", order_by="RunEvent.id")
 
     def to_dict(self):
         return {
@@ -288,6 +289,31 @@ class IpipResponse(db.Model):
     item_number = db.Column(db.Integer, nullable=False)  # 1–120
     score = db.Column(db.Integer, nullable=False)         # 1–5
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RunEvent(db.Model):
+    """Structured event log for a run — lifecycle, milestones, warnings, errors."""
+    __tablename__ = "run_events"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    run_id     = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=False)
+    tick       = db.Column(db.Integer, nullable=True)
+    level      = db.Column(db.String(10), nullable=False)   # info / warning / error
+    message    = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index("ix_run_events_run_id", "run_id"),
+    )
+
+    def to_dict(self):
+        return {
+            "id":         self.id,
+            "tick":       self.tick,
+            "level":      self.level,
+            "message":    self.message,
+            "created_at": self.created_at.isoformat(),
+        }
 
 
 class SimState(db.Model):

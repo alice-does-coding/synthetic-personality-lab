@@ -65,6 +65,7 @@ export const api = {
 
   // runs
   listRuns:    ()        => req("/runs/"),
+  getRunEvents: (id)    => req(`/runs/${id}/events`),
   listPersonas: ()       => req("/runs/personas"),
   createRun:   (body)    => adminReq("/runs/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   startRun:    (id)      => adminReq(`/runs/${id}/start`,    { method: "POST" }),

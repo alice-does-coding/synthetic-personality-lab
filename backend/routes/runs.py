@@ -152,6 +152,13 @@ def stop_run(run_id):
     return jsonify({"ok": True})
 
 
+@runs_bp.route("/<int:run_id>/events", methods=["GET"])
+def get_run_events(run_id):
+    from models import RunEvent
+    events = RunEvent.query.filter_by(run_id=run_id).order_by(RunEvent.id).all()
+    return jsonify([e.to_dict() for e in events])
+
+
 @runs_bp.route("/<int:run_id>", methods=["DELETE"])
 @require_admin
 def delete_run(run_id):

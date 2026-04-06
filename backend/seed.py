@@ -179,6 +179,12 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
             )
         configs.append(cfg)
 
+    # ── Log seeding started ───────────────────────────────────────────────────
+    from flask import current_app as _cur_app
+    from simulation import log_event
+    _app = _cur_app._get_current_object()
+    log_event(_app, run_id, "info", f"Seeding started — generating {num_agents} agents")
+
     # ── Generate all bios in parallel ─────────────────���────────────────────��─
     print(f"  Generating {num_agents} agent bios in parallel...")
     bios = [None] * num_agents
@@ -272,7 +278,10 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
         ))
 
     db.session.commit()
+    follow_count = len(follow_pairs)
     print(f"\nCreated {len(agents_created)} agents for run {run_id}.")
+    log_event(_app, run_id, "info",
+              f"Seeding complete — {len(agents_created)} agents, {follow_count} follows")
 
     # Mark run as running and spawn its tick thread
     run = db.session.get(Run, run_id)
@@ -281,9 +290,9 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
         run.status = "running"
         run.started_at = datetime.utcnow()
         db.session.commit()
-        from flask import current_app
+        log_event(_app, run_id, "info", "Run started")
         from simulation import start_run_thread
-        start_run_thread(current_app._get_current_object(), run_id)
+        start_run_thread(_app, run_id)
 
     return agents_created
 

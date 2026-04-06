@@ -23,6 +23,17 @@ class MistralAuthError(Exception):
     """Raised on 401 — invalid or exhausted API key. Run should be stopped."""
 
 
+def log_event(app, run_id, level, message, tick=None):
+    """Append a RunEvent. Opens its own app context — safe to call from any thread."""
+    try:
+        with app.app_context():
+            from models import RunEvent
+            db.session.add(RunEvent(run_id=run_id, tick=tick, level=level, message=message))
+            db.session.commit()
+    except Exception:
+        logger.warning("log_event failed (run %d): %s", run_id, message)
+
+
 def _extract_text(content):
     """Extract plain text from a Mistral response content field (str | list | None)."""
     if content is None:
@@ -148,6 +159,8 @@ def run_tick(app, run_id, force=False, force_ipip=False):
         return
     try:
         _run_tick_for_run(app, run_id, force=force, force_ipip=force_ipip)
+    except MistralAuthError as exc:
+        _fail_run(app, run_id, f"Mistral API key invalid or credits exhausted: {exc}")
     except Exception:
         logger.exception("manual tick crashed for run %d", run_id)
     finally:
@@ -158,7 +171,7 @@ def run_tick(app, run_id, force=False, force_ipip=False):
 _EMPTY_TICK_LIMIT = 3
 
 
-def _fail_run(app, run_id, reason):
+def _fail_run(app, run_id, reason, tick=None):
     from datetime import datetime
     with app.app_context():
         run = db.session.get(Run, run_id)
@@ -167,12 +180,14 @@ def _fail_run(app, run_id, reason):
             run.error = reason
             run.ended_at = datetime.utcnow()
             db.session.commit()
+    log_event(app, run_id, "error", reason, tick=tick)
     logger.error("run %d FAILED: %s", run_id, reason)
 
 
 def _tick_loop_for_run(app, run_id):
     logger.info("tick loop started for run %d", run_id)
     consecutive_empty = 0
+    current_tick = None
 
     while True:
         lock = _get_tick_lock(run_id)
@@ -180,7 +195,7 @@ def _tick_loop_for_run(app, run_id):
         produced = False
         fatal_reason = None
         try:
-            produced = _run_tick_for_run(app, run_id)
+            produced, current_tick = _run_tick_for_run(app, run_id)
         except MistralAuthError as exc:
             fatal_reason = f"Mistral API key invalid or credits exhausted: {exc}"
         except Exception:
@@ -189,17 +204,20 @@ def _tick_loop_for_run(app, run_id):
             lock.release()
 
         if fatal_reason:
-            _fail_run(app, run_id, fatal_reason)
+            _fail_run(app, run_id, fatal_reason, tick=current_tick)
             break
 
         if produced is False:
-            # Tick ran but produced nothing — count toward failure threshold
             consecutive_empty += 1
             logger.warning("run %d: empty tick %d/%d", run_id, consecutive_empty, _EMPTY_TICK_LIMIT)
+            log_event(app, run_id, "warning",
+                      f"Empty tick ({consecutive_empty}/{_EMPTY_TICK_LIMIT}) — no output produced",
+                      tick=current_tick)
             if consecutive_empty >= _EMPTY_TICK_LIMIT:
                 _fail_run(app, run_id,
                     f"Halted after {_EMPTY_TICK_LIMIT} consecutive ticks with zero output. "
-                    f"Check API key and model availability.")
+                    f"Check API key and model availability.",
+                    tick=current_tick)
                 break
         elif produced is True:
             consecutive_empty = 0
@@ -208,6 +226,8 @@ def _tick_loop_for_run(app, run_id):
         with app.app_context():
             run = db.session.get(Run, run_id)
             if not run or run.status != "running":
+                if run and run.status == "stopped":
+                    log_event(app, run_id, "info", "Run stopped manually", tick=current_tick)
                 break
             interval = 0 if run.batch_mode else app.config["SIMULATION_TICK_SECONDS"]
 
@@ -220,13 +240,13 @@ def _tick_loop_for_run(app, run_id):
 
 
 def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
-    """Run one tick. Returns True if something was produced, False if nothing was, None if skipped."""
+    """Run one tick. Returns (produced, tick) where produced is True/False/None (skipped)."""
     with app.app_context():
         run = db.session.get(Run, run_id)
         if not run:
-            return None
+            return None, None
         if not force and run.status != "running":
-            return None
+            return None, None
 
         tick = (run.last_tick or 0) + 1
         run_id = run.id  # ensure consistent
@@ -239,7 +259,12 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
             if not run.ended_at:
                 run.ended_at = datetime.utcnow()
             db.session.commit()
-            return
+            # Count posts for the completion event
+            from models import Post as _Post
+            post_total = db.session.query(db.func.count(_Post.id)).filter_by(run_id=run_id, is_public=True).scalar() or 0
+            log_event(app, run_id, "info",
+                      f"Tick limit reached — run complete ({run.tick_limit} ticks, {post_total} posts)")
+            return None, tick
 
         logger.info("tick %d starting (run %d)", tick, run_id)
         tick_start = time.monotonic()
@@ -380,7 +405,14 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
         else:
             logger.warning("tick %d produced nothing (run %d) — last_tick not advanced", tick, run_id)
         db.session.commit()
-        return produced
+
+        # Log IPIP assessment milestones
+        if do_ipip and snapshot_count > 0:
+            log_event(app, run_id, "info",
+                      f"IPIP assessment — {snapshot_count} agents scored",
+                      tick=tick)
+
+        return produced, tick
 
         total_s = time.monotonic() - tick_start
         ticks_per_hour = round(3600 / total_s) if total_s > 0 else "?"
