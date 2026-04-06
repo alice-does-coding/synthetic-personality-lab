@@ -257,8 +257,8 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent_id = futures[future]
                     try:
                         post_results[agent_id] = future.result()
-                    except (TypeError, AttributeError) as exc:
-                        # Programming error — not a transient API failure. Stop the run.
+                    except (TypeError, AttributeError, MistralAuthError) as exc:
+                        # Fatal errors — stop the run immediately
                         logger.critical("post generation fatal error for agent %d — halting run %d: %s", agent_id, run_id, exc)
                         raise
                     except Exception:
@@ -307,7 +307,7 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent_id = futures[future]
                     try:
                         ipip_results[agent_id] = future.result()
-                    except (TypeError, AttributeError) as exc:
+                    except (TypeError, AttributeError, MistralAuthError) as exc:
                         logger.critical("IPIP assessment fatal error for agent %d — halting run %d: %s", agent_id, run_id, exc)
                         raise
                     except Exception as exc:
@@ -345,7 +345,13 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False):
                     agent.neuroticism       = big_five["N"]
             db_s = time.monotonic() - db_start
 
-        run.last_tick = tick
+        # Only advance the tick counter if something was actually produced.
+        # If every agent failed (e.g. transient API errors), don't corrupt last_tick.
+        snapshot_count = len([r for r in ipip_results.values() if r is not None]) if do_ipip else 0
+        if post_count > 0 or snapshot_count > 0:
+            run.last_tick = tick
+        else:
+            logger.warning("tick %d produced nothing (run %d) — last_tick not advanced", tick, run_id)
         db.session.commit()
 
         total_s = time.monotonic() - tick_start
