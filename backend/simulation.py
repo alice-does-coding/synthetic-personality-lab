@@ -472,7 +472,7 @@ def _generate_thoughts(snap, client, user_prompt, n):
     """Generate n distinct thoughts in one call, separated by |||."""
     prompt = (
         user_prompt
-        + f"\n\nRespond with {n} different thoughts, each under 140 characters. "
+        + f"\n\nRespond with {n} different thoughts, each under 280 characters. "
         "Separate them with ||| and nothing else. Output only the thoughts, no numbering, no quotes."
     )
     resp = _mistral_chat(
@@ -490,8 +490,8 @@ def _generate_thoughts(snap, client, user_prompt, n):
     # fallback: if separator wasn't used, split on newlines
     if len(thoughts) < 2:
         thoughts = [_clean_post(t) for t in raw.splitlines() if t.strip()]
-    thoughts = [t[:140] for t in thoughts if t]
-    return thoughts[:n] if thoughts else [_clean_post(raw)[:140]]
+    thoughts = [t[:280] for t in thoughts if t]
+    return thoughts[:n] if thoughts else [_clean_post(raw)[:280]]
 
 
 def _generate_post(snap):
@@ -507,13 +507,13 @@ def _generate_post(snap):
             client,
             messages=[
                 {"role": "system", "content": _build_system_prompt(snap)},
-                {"role": "user",   "content": user_prompt + "\n\nReply in plain text, under 140 characters. No quotes around your reply."},
+                {"role": "user",   "content": user_prompt + "\n\nReply in plain text, under 280 characters. No quotes around your reply."},
             ],
             max_tokens=Config.MAX_POST_TOKENS,
             temperature=0.9,
             model=Config.MISTRAL_POST_MODEL,
         )
-        content = _clean_post(_extract_text(resp.choices[0].message.content))[:140]
+        content = _clean_post(_extract_text(resp.choices[0].message.content))[:280]
         return [(content, r["id"], None, "reply", user_prompt, True)]
 
     # Top-level posts: generate N thoughts, agent selects one to publish
