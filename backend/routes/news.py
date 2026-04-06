@@ -10,23 +10,28 @@ news_bp = Blueprint("news", __name__)
 @news_bp.route("/", methods=["GET"])
 def list_news():
     """All tracked headlines, most-engaged first."""
+    from database import db
+    from sqlalchemy import text, func
     run_id = request.args.get("run_id", type=int)
     news_q = NewsItem.query
     if run_id:
         news_q = news_q.filter_by(run_id=run_id)
     items = news_q.order_by(NewsItem.first_seen_at.desc()).all()
 
-    # Count posts referencing each URL
-    post_q = Post.query.filter(Post.news_context.isnot(None))
-    if run_id:
-        post_q = post_q.filter_by(run_id=run_id)
-    all_posts = post_q.all()
+    # Count engagement via Postgres JSON expansion (fast) — falls back to 0 on SQLite
     engagement = {}
-    for post in all_posts:
-        for h in (post.news_context or []):
-            url = h.get("url")
-            if url:
-                engagement[url] = engagement.get(url, 0) + 1
+    try:
+        params = {"run_id": run_id} if run_id else {}
+        run_filter = "AND p.run_id = :run_id" if run_id else ""
+        rows = db.session.execute(text(f"""
+            SELECT item->>'url' AS url, count(*) AS cnt
+            FROM posts p, json_array_elements(p.news_context) AS item
+            WHERE p.news_context IS NOT NULL {run_filter}
+            GROUP BY item->>'url'
+        """), params).fetchall()
+        engagement = {r[0]: r[1] for r in rows if r[0]}
+    except Exception:
+        pass  # SQLite or schema mismatch — engagement stays empty
 
     result = []
     for item in items:
@@ -41,14 +46,20 @@ def list_news():
 @news_bp.route("/<int:item_id>/posts", methods=["GET"])
 def news_posts(item_id):
     """Posts that were generated in response to this headline."""
+    from database import db
+    from sqlalchemy import text
     item = NewsItem.query.get_or_404(item_id)
-    posts = Post.query.filter(Post.news_context.isnot(None)).all()
-    matching = [
-        p for p in posts
-        if any(h.get("url") == item.url for h in (p.news_context or []))
-    ]
-    matching.sort(key=lambda p: p.created_at, reverse=True)
-    return jsonify([p.to_dict() for p in matching])
+    try:
+        rows = db.session.execute(text("""
+            SELECT p.id FROM posts p, json_array_elements(p.news_context) AS h
+            WHERE p.run_id = :run_id AND p.news_context IS NOT NULL
+              AND h->>'url' = :url
+        """), {"run_id": item.run_id, "url": item.url}).fetchall()
+        ids = [r[0] for r in rows]
+        posts = Post.query.filter(Post.id.in_(ids)).order_by(Post.created_at.desc()).all() if ids else []
+    except Exception:
+        posts = []
+    return jsonify([p.to_dict() for p in posts])
 
 
 @news_bp.route("/sentiment-over-time", methods=["GET"])
@@ -199,9 +210,19 @@ def sentiment_contagion():
 @news_bp.route("/personality-correlation", methods=["GET"])
 def personality_correlation():
     """For each agent: avg sentiment of news they engaged with + their OCEAN scores."""
-    posts = Post.query.filter(Post.news_context.isnot(None)).all()
-    items = {i.url: i.sentiment for i in NewsItem.query.filter_by(analyzed=True).all()}
-    agents = {a.id: a for a in Agent.query.filter_by(is_active=True).all()}
+    run_id = request.args.get("run_id", type=int)
+    post_q = Post.query.filter(Post.news_context.isnot(None))
+    if run_id:
+        post_q = post_q.filter_by(run_id=run_id)
+    posts = post_q.all()
+    news_q = NewsItem.query.filter_by(analyzed=True)
+    if run_id:
+        news_q = news_q.filter_by(run_id=run_id)
+    items = {i.url: i.sentiment for i in news_q.all()}
+    agent_q = Agent.query.filter_by(is_active=True)
+    if run_id:
+        agent_q = agent_q.filter_by(run_id=run_id)
+    agents = {a.id: a for a in agent_q.all()}
 
     # Avg sentiment per agent
     agent_sentiments = {}

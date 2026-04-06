@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy.orm import joinedload
 
 from auth import require_admin
 from database import db
@@ -17,7 +18,10 @@ def list_posts():
     tick_max        = request.args.get("tick_max", type=int)
     engagement_type = request.args.get("engagement_type")
 
-    query = Post.query.filter_by(is_public=True).order_by(Post.created_at.desc())
+    query = Post.query.options(
+        joinedload(Post.agent),
+        joinedload(Post.parent).joinedload(Post.agent),
+    ).filter_by(is_public=True).order_by(Post.created_at.desc())
     if agent_id:
         query = query.filter_by(agent_id=agent_id)
     if run_id:

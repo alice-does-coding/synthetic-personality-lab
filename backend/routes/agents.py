@@ -1,7 +1,9 @@
 from collections import defaultdict
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from auth import require_admin
 from database import db
@@ -66,33 +68,30 @@ def get_personality_history(agent_id):
 
 @agents_bp.route("/population", methods=["GET"])
 def population_drift():
-    """Average + SD of OCEAN scores across all agents per tick."""
-    import math
+    """Average + SD of OCEAN scores across all agents per tick — computed in SQL."""
     run_id = request.args.get("run_id", type=int)
-    q = PersonalitySnapshot.query
+
+    cols = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"]
+    trait_cols = getattr(PersonalitySnapshot, "__table__").c
+
+    aggs = [PersonalitySnapshot.tick_number, func.count(PersonalitySnapshot.id).label("n")]
+    for t in cols:
+        col = getattr(PersonalitySnapshot, t)
+        aggs.append(func.avg(col).label(t))
+        aggs.append(func.stddev_pop(col).label(f"{t}_sd"))
+
+    q = db.session.query(*aggs)
     if run_id:
-        q = q.filter_by(run_id=run_id)
-    snapshots = q.order_by(PersonalitySnapshot.tick_number).all()
-
-    by_tick = defaultdict(list)
-    for s in snapshots:
-        by_tick[s.tick_number].append(s)
-
-    def sd(values, mean):
-        if len(values) < 2:
-            return 0.0
-        return math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
+        q = q.filter(PersonalitySnapshot.run_id == run_id)
+    rows = q.group_by(PersonalitySnapshot.tick_number).order_by(PersonalitySnapshot.tick_number).all()
 
     result = []
-    for tick, snaps in sorted(by_tick.items()):
-        n = len(snaps)
-        row = {"tick_number": tick, "agent_count": n}
-        for trait in ("openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"):
-            vals = [getattr(s, trait) for s in snaps]
-            mean = sum(vals) / n
-            row[trait] = mean
-            row[f"{trait}_sd"] = sd(vals, mean)
-        result.append(row)
+    for row in rows:
+        d = {"tick_number": row.tick_number, "agent_count": row.n}
+        for t in cols:
+            d[t] = round(getattr(row, t) or 0, 4)
+            d[f"{t}_sd"] = round(getattr(row, f"{t}_sd") or 0, 4)
+        result.append(d)
 
     return jsonify(result)
 
@@ -112,14 +111,15 @@ def graph():
         Follow.followee_id.in_(agent_ids),
     ).all()
 
-    # Post and follower counts
-    from collections import Counter
+    # Post and follower counts — SQL aggregation, no full table load
     from models import Post
-    post_q = Post.query.filter_by(is_public=True)
+    post_q = db.session.query(Post.agent_id, func.count(Post.id).label("n")).filter(Post.is_public == True)
     if run_id:
-        post_q = post_q.filter_by(run_id=run_id)
-    post_counts     = Counter(p.agent_id for p in post_q.all())
-    follower_counts = Counter(f.followee_id for f in follows)
+        post_q = post_q.filter(Post.run_id == run_id)
+    post_counts = {row.agent_id: row.n for row in post_q.group_by(Post.agent_id).all()}
+    follower_counts = {}
+    for f in follows:
+        follower_counts[f.followee_id] = follower_counts.get(f.followee_id, 0) + 1
 
     nodes = [
         {
@@ -148,19 +148,31 @@ def trajectories():
     if run_id:
         q = q.filter_by(run_id=run_id)
     agents = q.all()
-    result = []
-    for agent in agents:
-        snap_q = PersonalitySnapshot.query.filter_by(agent_id=agent.id)
-        if run_id:
-            snap_q = snap_q.filter_by(run_id=run_id)
-        snaps = snap_q.order_by(PersonalitySnapshot.tick_number).all()
-        result.append({
-            "id":     agent.id,
-            "name":   agent.name,
-            "handle": agent.handle,
-            "snapshots": [s.to_dict() for s in snaps],
-        })
-    return jsonify(result)
+    if not agents:
+        return jsonify([])
+
+    agent_map = {a.id: a for a in agents}
+    agent_ids = list(agent_map)
+
+    # One query for all snapshots — avoids N+1
+    snap_q = PersonalitySnapshot.query.filter(PersonalitySnapshot.agent_id.in_(agent_ids))
+    if run_id:
+        snap_q = snap_q.filter_by(run_id=run_id)
+    snaps = snap_q.order_by(PersonalitySnapshot.agent_id, PersonalitySnapshot.tick_number).all()
+
+    by_agent = defaultdict(list)
+    for s in snaps:
+        by_agent[s.agent_id].append(s.to_dict())
+
+    return jsonify([
+        {
+            "id":        a.id,
+            "name":      a.name,
+            "handle":    a.handle,
+            "snapshots": by_agent.get(a.id, []),
+        }
+        for a in agents
+    ])
 
 
 @agents_bp.route("/<int:follower_id>/follow/<int:followee_id>", methods=["POST"])

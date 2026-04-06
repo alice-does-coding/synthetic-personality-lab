@@ -147,6 +147,15 @@ class Post(db.Model):
     emotion = db.Column(db.String(50), nullable=True) # e.g. "joy", "sadness", "anger"
     nlp_analyzed = db.Column(db.Boolean, default=False, nullable=False)
 
+    __table_args__ = (
+        db.Index("ix_posts_run_id",            "run_id"),
+        db.Index("ix_posts_agent_id",          "agent_id"),
+        db.Index("ix_posts_run_created",       "run_id", "created_at"),
+        db.Index("ix_posts_run_public",        "run_id", "is_public"),
+        db.Index("ix_posts_run_nlp",           "run_id", "nlp_analyzed"),
+        db.Index("ix_posts_news_context",      "run_id", postgresql_where=db.text("news_context IS NOT NULL")),
+    )
+
     replies = db.relationship(
         "Post",
         backref=db.backref("parent", remote_side="Post.id"),
@@ -248,6 +257,13 @@ class PersonalitySnapshot(db.Model):
     agreeableness = db.Column(db.Float, nullable=False)
     neuroticism = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index("ix_snapshots_run_id",        "run_id"),
+        db.Index("ix_snapshots_agent_id",      "agent_id"),
+        db.Index("ix_snapshots_run_tick",      "run_id", "tick_number"),
+        db.Index("ix_snapshots_agent_tick",    "agent_id", "tick_number"),
+    )
 
     def to_dict(self):
         return {
