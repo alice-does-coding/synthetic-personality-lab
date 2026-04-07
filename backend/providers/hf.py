@@ -129,16 +129,12 @@ def generate_avatar(bio, name=None, model=None):
     """
     import base64
 
-    if name:
-        prompt = (
-            f"Portrait of {name}. {bio[:150]} "
-            "Profile picture, expressive face, dark background, vibrant, high detail."
-        )
-    else:
-        prompt = (
-            f"A digital portrait of an entity with this character: {bio[:200]}. "
-            "Profile picture, expressive face, dark background, vibrant, high detail."
-        )
+    subject = f"{name} — {bio[:120]}" if name else bio[:180]
+    prompt = (
+        f"Pixel art profile avatar of {subject}. "
+        "16-bit pixel art style, expressive character portrait, "
+        "vibrant colors, dark background, retro game aesthetic, square format."
+    )
     url = _AVATAR_URL
     headers = {
         "Authorization": f"Bearer {Config.HF_API_KEY}",

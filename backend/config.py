@@ -13,6 +13,8 @@ class Config:
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,       # verify connection before use — kills stale SSL sockets
         "pool_recycle":  300,        # recycle connections after 5 min regardless
+        "pool_size":     10,         # base pool — enough for arcade + research + web workers
+        "max_overflow":  20,         # burst headroom during heavy tick load
     }
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
     MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
@@ -35,6 +37,8 @@ class Config:
     HF_API_KEY = os.getenv("HF_API_KEY")
     # HF Pro serverless rate limit (req/sec) — conservative default for Pro tier
     HF_RATE_LIMIT = float(os.getenv("HF_RATE_LIMIT", 8.0))
+    # Fallback chat model used when primary provider (Mistral) is unavailable
+    HF_CHAT_MODEL = os.getenv("HF_CHAT_MODEL", "Qwen/Qwen2.5-72B-Instruct")
     # Thoughts generated per top-level post tick — 1 published, rest become inner monologue
     N_THOUGHTS = int(os.getenv("N_THOUGHTS", 3))
     # Max tokens per post/reply — 140 chars ≈ 40 tokens, use 200 for safe headroom

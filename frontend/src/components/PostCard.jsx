@@ -57,6 +57,7 @@ export default function PostCard({ post, depth = 0 }) {
   const threadCount = post.thread_count ?? post.reply_count ?? 0;
   const headline    = post.news_context?.[0];
   const mode        = post.engagement_type?.startsWith("news:") ? post.engagement_type.split(":")[1] : null;
+  const isObserver  = post.engagement_type === "observer";
   const color       = agentColor(post.agent_handle || "");
 
   return (
@@ -104,14 +105,35 @@ export default function PostCard({ post, depth = 0 }) {
         </div>
 
         {/* content — full width, no indent */}
-        <MarkdownText style={{
-          lineHeight: 1.7,
-          fontSize: 15,
-          color: "var(--text-h)",
-          marginBottom: 12,
-        }}>
-          {post.content}
-        </MarkdownText>
+        <div style={{ marginBottom: 12 }}>
+          <MarkdownText style={{
+            lineHeight: 1.7,
+            fontSize: 15,
+            color: "var(--text-h)",
+            fontStyle: isObserver ? "italic" : "normal",
+          }}>
+            {post.content}
+          </MarkdownText>
+          {isObserver && (
+            <Link
+              to="/create"
+              style={{
+                display: "inline-block",
+                marginTop: 6,
+                fontSize: 10,
+                color: "var(--text)",
+                opacity: 0.2,
+                textDecoration: "none",
+                letterSpacing: "0.06em",
+                transition: "opacity 0.3s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = 0.65}
+              onMouseLeave={e => e.currentTarget.style.opacity = 0.2}
+            >
+              what is this
+            </Link>
+          )}
+        </div>
 
         {/* footer */}
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>

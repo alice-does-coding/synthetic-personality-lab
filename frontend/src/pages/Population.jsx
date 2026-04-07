@@ -320,7 +320,7 @@ function AgentRadar({ agent }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Population() {
-  const { viewingRunId } = useRun();
+  const { viewingRunId, runsLoaded } = useRun();
   const [agents,       setAgents]       = useState([]);
   const [drift,        setDrift]        = useState([]);
   const [trajectories, setTrajectories] = useState([]);
@@ -336,6 +336,8 @@ export default function Population() {
       .finally(() => setLoading(false));
   }, [viewingRunId]);
 
+  if (!runsLoaded)   return <p className="muted">Loading…</p>;
+  if (!viewingRunId) return <p className="muted">No run selected.</p>;
   if (loading) return <p className="muted">Loading…</p>;
   if (error)   return <p className="error">{error}</p>;
 

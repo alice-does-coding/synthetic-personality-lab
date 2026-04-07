@@ -210,7 +210,7 @@ function AgentProfileGrid({ data }) {
 }
 
 export default function News() {
-  const { viewingRunId } = useRun();
+  const { viewingRunId, runsLoaded } = useRun();
   const [items,        setItems]        = useState([]);
   const [newsOverTime, setNewsOverTime] = useState([]);
   const [postOverTime, setPostOverTime] = useState([]);
@@ -241,6 +241,8 @@ export default function News() {
       .finally(() => setLoading(false));
   }, [viewingRunId]);
 
+  if (!runsLoaded)   return <p className="muted" style={{ padding: 20 }}>Loading…</p>;
+  if (!viewingRunId) return <p className="muted" style={{ padding: 20 }}>No run selected.</p>;
   if (loading) return <p className="muted" style={{ padding: 20 }}>loading…</p>;
   if (error)   return <p className="error"  style={{ padding: 20 }}>{error}</p>;
 

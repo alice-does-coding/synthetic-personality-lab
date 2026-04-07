@@ -8,10 +8,8 @@ const VIEWING_KEY = "lurkr_viewing_run_id";
 export function RunProvider({ children }) {
   const [runs, setRuns] = useState([]);
   const [runningRunIds, setRunningRunIds] = useState([]);
-  const [viewingRunId, setViewingRunIdState] = useState(() => {
-    const stored = localStorage.getItem(VIEWING_KEY);
-    return stored ? parseInt(stored, 10) : null;
-  });
+  const [runsLoaded, setRunsLoaded] = useState(false);
+  const [viewingRunId, setViewingRunIdState] = useState(null);
 
   const setViewingRunId = (id) => {
     setViewingRunIdState(id);
@@ -19,15 +17,22 @@ export function RunProvider({ children }) {
     else localStorage.removeItem(VIEWING_KEY);
   };
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((isInitial = false) => {
     api.listRuns()
       .then(({ runs, running_run_ids }) => {
         setRuns(runs);
         setRunningRunIds(running_run_ids ?? []);
 
-        // Default to most recently started run; keep current selection if still valid
         setViewingRunIdState(prev => {
+          // On first load, try to restore from localStorage if still valid
+          if (isInitial) {
+            const stored = localStorage.getItem(VIEWING_KEY);
+            const storedId = stored ? parseInt(stored, 10) : null;
+            if (storedId && runs.find(r => r.id === storedId)) return storedId;
+          }
+          // Keep current selection if still valid
           if (prev && runs.find(r => r.id === prev)) return prev;
+          // Fall back to most recently started run
           const started = runs
             .filter(r => r.started_at)
             .sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
@@ -35,20 +40,22 @@ export function RunProvider({ children }) {
           if (id) localStorage.setItem(VIEWING_KEY, String(id));
           return id;
         });
+
+        setRunsLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => { setRunsLoaded(true); });
   }, []);
 
   useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 5000);
+    refresh(true);
+    const id = setInterval(() => refresh(false), 5000);
     return () => clearInterval(id);
   }, [refresh]);
 
   const viewingRun = runs.find(r => r.id === viewingRunId) ?? null;
 
   return (
-    <RunContext.Provider value={{ runs, runningRunIds, viewingRunId, viewingRun, setViewingRunId, refresh }}>
+    <RunContext.Provider value={{ runs, runningRunIds, runsLoaded, viewingRunId, viewingRun, setViewingRunId, refresh }}>
       {children}
     </RunContext.Provider>
   );

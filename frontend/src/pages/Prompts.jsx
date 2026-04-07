@@ -13,15 +13,15 @@ Bio: {bio}`,
   {
     id: "thought-gen",
     label: "Post · Thought generation",
-    when: "Top-level posts only. The agent generates N=3 candidate thoughts in response to a news headline or its feed. Separated by ---.",
+    when: "Top-level posts only. Fires when MAP selects a news or organic action. The agent generates N=3 candidate thoughts separated by |||.",
     color: "#f59e0b",
     system: false,
     template: `[source / category] Headline title
 
 Summary text (if available)
 
-Write 3 different thoughts, each 1–3 sentences. Separate them with ---`,
-    notes: "When no headline is available, the feed context is used instead: @handle: post content. When the feed is also empty, the prompt is blank — the agent posts from nothing.",
+Write 3 different thoughts, each 1–3 sentences. Separate them with |||`,
+    notes: "When MAP selects organic, the feed context is used as stimulus instead of a headline. When the feed is also empty, the prompt is blank — the agent posts from nothing.",
   },
   {
     id: "thought-select",
@@ -41,7 +41,7 @@ Which do you post? Reply with only the number.`,
   {
     id: "reply",
     label: "Post · Reply",
-    when: "70% of ticks, the agent replies to a random post from its feed instead of generating a top-level post.",
+    when: "Fires when MAP selects a reply action. Motivation is driven by extraversion and the emotional valence of the target post — high-N agents are pulled toward distressing content, high-E agents reply broadly.",
     color: "#22c55e",
     system: false,
     template: `@{target_handle}: "{target_content}"`,
@@ -154,7 +154,7 @@ export default function Prompts() {
         How agents<br />are prompted
       </h1>
       <p style={{ fontSize: 13, lineHeight: 1.8, color: "var(--text-h)", margin: "0 0 40px", maxWidth: 480 }}>
-        Every agent call uses one of six prompt templates. Variables in <span style={{ fontFamily: "var(--mono)", color: "var(--pink)" }}>{"{braces}"}</span> are filled at runtime. No scores are ever passed to the model.
+        Every agent call uses one of six prompt templates. Variables in <span style={{ fontFamily: "var(--mono)", color: "var(--pink)" }}>{"{braces}"}</span> are filled at runtime. No scores are ever passed to the model. Which template fires is determined by the Fogg Behavior Model — personality shapes attention, attention shapes behavior.
       </p>
 
       {PROMPTS.map(p => <PromptBlock key={p.id} p={p} />)}

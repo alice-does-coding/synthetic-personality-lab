@@ -45,7 +45,7 @@ function nodeRadius(val, max) {
 }
 
 export default function Graph() {
-  const { viewingRunId } = useRun();
+  const { viewingRunId, runsLoaded } = useRun();
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [trait,     setTrait]     = useState("extraversion");
   const [sizeBy,    setSizeBy]    = useState("follower_count");
@@ -220,7 +220,9 @@ export default function Graph() {
       containerRef.current.style.cursor = node ? "pointer" : "default";
   }, []);
 
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Loading…</p>;
+  if (!runsLoaded)   return <p className="muted" style={{ padding: 24 }}>Loading…</p>;
+  if (!viewingRunId) return <p className="muted" style={{ padding: 24 }}>No run selected.</p>;
+  if (loading)       return <p className="muted" style={{ padding: 24 }}>Loading…</p>;
   if (error)   return <p className="error"  style={{ padding: 24 }}>{error}</p>;
 
   const traitColor  = TRAIT_COLORS[trait];

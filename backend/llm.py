@@ -8,30 +8,47 @@ from providers.base import LLMAuthError, LLMRateLimitError  # re-export for call
 __all__ = ["chat", "chat_ipip", "extract_text", "generate_avatar", "reset_auth_latches", "LLMAuthError", "LLMRateLimitError"]
 
 
-def reset_auth_latches():
-    """Clear per-provider auth-failure latches. Called at the start of each tick."""
-    from providers.mistral import reset_stats   # reset_stats also clears the latch
+def reset_auth_latches(tick=None, retry_interval=12):
+    """Reset per-tick stats. Auth latch is only cleared every retry_interval ticks
+    so a bad Mistral key doesn't waste a call on every single tick."""
+    from providers.mistral import reset_stats
     from providers.hf import reset_auth
-    reset_stats()
+    clear_latch = (tick is None) or (tick % retry_interval == 0)
+    reset_stats(clear_auth_latch=clear_latch)
     reset_auth()
+
+
+def _hf_fallback(messages, max_tokens, temperature):
+    """Fall back to HF when the primary provider is unavailable."""
+    import logging
+    from config import Config
+    from providers.hf import chat as hf_chat
+    logging.getLogger(__name__).warning("primary provider unavailable — falling back to HF (%s)", Config.HF_CHAT_MODEL)
+    return hf_chat(messages, max_tokens, temperature, model=Config.HF_CHAT_MODEL)
 
 
 def chat(provider, model, messages, max_tokens, temperature):
     """Route a chat call to the correct provider.
 
+    Falls back to HF automatically on auth failure so the arcade keeps running
+    even when the primary provider (Mistral) has a billing/key issue.
+
     Returns:
         str for HF (plain string content).
         Mistral response object for mistral (caller must use extract_text).
 
-    Raises LLMAuthError on fatal auth failure.
+    Raises LLMAuthError only if both primary and fallback fail.
     """
     if provider == "hf":
         from providers.hf import chat as hf_chat
         return hf_chat(messages, max_tokens, temperature, model=model)
     else:  # default: mistral
-        from providers.mistral import make_client, chat as mistral_chat
-        client = make_client()
-        return mistral_chat(client, messages, max_tokens, temperature, model=model)
+        try:
+            from providers.mistral import make_client, chat as mistral_chat
+            client = make_client()
+            return mistral_chat(client, messages, max_tokens, temperature, model=model)
+        except LLMAuthError:
+            return _hf_fallback(messages, max_tokens, temperature)
 
 
 def chat_ipip(provider, model, messages, max_tokens, temperature):
@@ -40,9 +57,12 @@ def chat_ipip(provider, model, messages, max_tokens, temperature):
         from providers.hf import chat as hf_chat
         return hf_chat(messages, max_tokens, temperature, model=model)
     else:
-        from providers.mistral import make_ipip_client, chat as mistral_chat
-        client = make_ipip_client()
-        return mistral_chat(client, messages, max_tokens, temperature, model=model)
+        try:
+            from providers.mistral import make_ipip_client, chat as mistral_chat
+            client = make_ipip_client()
+            return mistral_chat(client, messages, max_tokens, temperature, model=model)
+        except LLMAuthError:
+            return _hf_fallback(messages, max_tokens, temperature)
 
 
 def generate_avatar(provider, bio, name=None):

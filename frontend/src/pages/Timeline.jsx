@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import PostCard from "../components/PostCard";
-import { useRun } from "../RunContext";
+import { useArcade } from "../ArcadeContext";
 
 const TRAITS = [
   { key: "agent_openness",          label: "Openness",          short: "O", color: "#a78bfa" },
@@ -48,8 +48,9 @@ const ENG_TYPES = [
 ];
 
 export default function Timeline() {
-  const { viewingRunId, viewingRun, runningRunIds } = useRun();
-  const isRunning = viewingRun && runningRunIds.includes(viewingRun.id);
+  const { arcadeRunId, arcadeRun, arcadeLoaded } = useArcade();
+  const viewingRunId = arcadeRunId;
+  const isRunning    = arcadeRun?.status === "running";
 
   const [posts,        setPosts]        = useState([]);
   const [pending,      setPending]      = useState([]);
@@ -65,7 +66,7 @@ export default function Timeline() {
   // Use max_post_tick (actual highest tick with posts) for the window calculation.
   // last_tick can be inflated when the tick counter ran ahead of post generation
   // (e.g. Mistral 401 stopped posts but IPIP tick counter kept going).
-  const maxTick    = viewingRun?.max_post_tick || viewingRun?.last_tick || 0;
+  const maxTick    = arcadeRun?.max_post_tick || arcadeRun?.last_tick || 0;
   const maxTickRef = useRef(maxTick);
   maxTickRef.current = maxTick;
 
@@ -127,6 +128,9 @@ export default function Timeline() {
     setPosts(prev => [...pending, ...prev]);
     setPending([]);
   };
+
+  if (!arcadeLoaded) return <p className="muted">Loading…</p>;
+  if (!arcadeRunId)  return <p className="muted">Arcade not available.</p>;
 
   const sorted = sortPosts(posts, sortBy, trait);
 

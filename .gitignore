@@ -34,6 +34,12 @@ Thumbs.db
 # Claude Code
 .claude/settings.local.json
 
+# Local run logs
+logs/
+
+# Debug screenshots
+screenshots/
+
 # Data exports and analysis artifacts
 backend/*.json
 backend/*.png

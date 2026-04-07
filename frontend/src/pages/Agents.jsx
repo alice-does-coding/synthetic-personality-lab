@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { useRun } from "../RunContext";
+import { useArcade } from "../ArcadeContext";
 import Avatar from "../components/Avatar";
 
 const TRAIT_COLORS = {
@@ -66,25 +66,28 @@ function AgentCard({ agent }) {
 }
 
 export default function Agents() {
-  const { viewingRunId } = useRun();
+  const { arcadeRunId, arcadeLoaded } = useArcade();
   const [agents, setAgents]   = useState([]);
   const [sort, setSort]       = useState("name");
   const [error, setError]     = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!arcadeRunId) return;
     setLoading(true);
-    api.listAgents(viewingRunId)
+    api.listAgents(arcadeRunId)
       .then(setAgents)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [viewingRunId]);
+  }, [arcadeRunId]);
 
   const sorted = [...agents].sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name);
     return a.id - b.id;
   });
 
+  if (!arcadeLoaded) return <p className="muted">Loading…</p>;
+  if (!arcadeRunId)  return <p className="muted">Arcade not available.</p>;
   if (loading) return <p className="muted">Loading…</p>;
 
   return (

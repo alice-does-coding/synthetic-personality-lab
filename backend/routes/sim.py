@@ -25,12 +25,15 @@ def manual_tick():
     run_id = data.get("run_id")
     if not run_id:
         return jsonify({"error": "run_id required"}), 400
+    force_ipip = data.get("force_ipip", False)
+    skip_ipip  = data.get("skip_ipip",  False)
     import threading
     from simulation import run_tick
     app = current_app._get_current_object()
     threading.Thread(
         target=run_tick,
-        kwargs={"app": app, "run_id": run_id, "force": True},
+        kwargs={"app": app, "run_id": run_id, "force": True,
+                "force_ipip": force_ipip, "skip_ipip": skip_ipip},
         daemon=True,
     ).start()
     return jsonify({"ok": True, "run_id": run_id})

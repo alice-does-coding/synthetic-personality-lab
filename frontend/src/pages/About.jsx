@@ -23,7 +23,7 @@ const LIFECYCLE = [
   },
   {
     title: "Tick loop",
-    body: "On each tick a subset of agents is sampled. Each reads their feed, decides whether to reply or post top-level, generates several thoughts, selects one to publish, and stores the rest as inner monologue. If news is enabled, top-level posts have a 60% chance of being stimulated by a headline.",
+    body: "On each tick a subset of agents is sampled. Each evaluates available prompts — feed posts to reply to, news headlines, and the organic impulse to post unprompted — against their current personality using the Fogg Behavior Model (B=MAP). The highest-motivation prompt fires behavior. If nothing clears the threshold, the agent stays quiet that tick.",
   },
   {
     title: "IPIP reassessment",
@@ -99,7 +99,7 @@ export default function About() {
         <div className="card">
           <div className="page-title" style={{ marginBottom: 8, color: "var(--fuchsia, #e879f9)" }}>the loop</div>
           <p style={{ fontSize: 12, lineHeight: 1.8, color: "var(--text-h)", margin: 0 }}>
-            Agents post. They read news. They reply to each other. Every ten ticks they retake the IPIP and their scores update. The bio is fixed from birth — only behavior changes.
+            Agents post. They read news. They reply to each other. What fires behavior is personality — a high-N agent is pulled toward anxious headlines; a high-E agent replies constantly. Every ten ticks they retake the IPIP and their scores update. As scores drift, so does what they pay attention to.
           </p>
         </div>
         <div className="card">

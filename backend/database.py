@@ -10,6 +10,18 @@ _MIGRATIONS = [
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS error TEXT",
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS provider VARCHAR(50) NOT NULL DEFAULT 'mistral'",
     "ALTER TABLE agents ADD COLUMN IF NOT EXISTS avatar TEXT",
+    # 2026-04-06 — behavior model + arcade
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS behavior_model VARCHAR(50)",
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_arcade BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE agents ADD COLUMN IF NOT EXISTS creator_token VARCHAR(36)",
+    "ALTER TABLE agents ADD COLUMN IF NOT EXISTS origin_description TEXT",
+    "ALTER TABLE agents ADD COLUMN IF NOT EXISTS expires_at_tick INTEGER",
+    "CREATE INDEX IF NOT EXISTS ix_agents_creator_token ON agents (creator_token)",
+    # 2026-04-07 — interest model
+    "ALTER TABLE agents ADD COLUMN IF NOT EXISTS interests JSONB",
+    "ALTER TABLE posts ADD COLUMN IF NOT EXISTS topics JSONB",
+    # 2026-04-07 — decouple lifetime from tick count; use wall-clock expiry
+    "ALTER TABLE agents ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP",
 ]
 
 

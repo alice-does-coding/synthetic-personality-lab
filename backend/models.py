@@ -1,4 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _iso(dt):
+    """Serialize a naive UTC datetime as an ISO 8601 string with Z suffix."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
 from database import db
 
 
@@ -25,6 +32,10 @@ class Run(db.Model):
     random_seed       = db.Column(db.Integer, nullable=True)
     name_pool         = db.Column(db.JSON, nullable=True)  # list of names; overrides agent_count
     ghost_post_id     = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
+    behavior_model    = db.Column(db.String(50), nullable=True, default=None)
+    # null / None  — random baseline (legacy behavior: 70% reply, 40% news)
+    # "map"        — Fogg B=MAP, personality-driven prompt selection
+    is_arcade         = db.Column(db.Boolean, default=False, nullable=False)
     status            = db.Column(db.String(20), nullable=False, default="pending")
     last_tick         = db.Column(db.Integer, default=0, nullable=False)
     # pending   — queued, seeding not started
@@ -68,13 +79,15 @@ class Run(db.Model):
             "random_seed":       self.random_seed,
             "name_pool":         self.name_pool,
             "ghost_post_id":     self.ghost_post_id,
+            "behavior_model":    self.behavior_model,
+            "is_arcade":         self.is_arcade,
             "status":            self.status,
             "last_tick":         self.last_tick,
             "error":             self.error,
-            "started_at":        self.started_at.isoformat() if self.started_at else None,
-            "ended_at":          self.ended_at.isoformat() if self.ended_at else None,
+            "started_at":        _iso(self.started_at),
+            "ended_at":          _iso(self.ended_at),
             "notes":             self.notes,
-            "created_at":        self.created_at.isoformat(),
+            "created_at":        _iso(self.created_at),
         }
 
 
@@ -90,12 +103,20 @@ class Agent(db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    # Arcade-only fields — null on research agents
+    creator_token      = db.Column(db.String(36), nullable=True, index=True)  # UUID from client
+    origin_description = db.Column(db.Text, nullable=True)   # what the user typed
+    expires_at         = db.Column(db.DateTime, nullable=True) # null = never expires
+
     # Current Big Five scores (0–100), updated after each IPIP assessment
     openness = db.Column(db.Float, nullable=True)
     conscientiousness = db.Column(db.Float, nullable=True)
     extraversion = db.Column(db.Float, nullable=True)
     agreeableness = db.Column(db.Float, nullable=True)
     neuroticism = db.Column(db.Float, nullable=True)
+
+    # Interest tags derived from OCEAN at creation time — used for feed weighting
+    interests = db.Column(db.JSON, nullable=True)
 
     posts = db.relationship("Post", backref="agent", lazy="select", cascade="all, delete-orphan")
     snapshots = db.relationship("PersonalitySnapshot", backref="agent", lazy="select", cascade="all, delete-orphan")
@@ -124,7 +145,10 @@ class Agent(db.Model):
             "bio": self.bio,
             "avatar": self.avatar,
             "is_active": self.is_active,
-            "created_at": self.created_at.isoformat(),
+            "created_at": _iso(self.created_at),
+            "creator_token": self.creator_token,
+            "origin_description": self.origin_description,
+            "expires_at": _iso(self.expires_at),
             "personality": {
                 "openness": self.openness,
                 "conscientiousness": self.conscientiousness,
@@ -148,6 +172,7 @@ class Post(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
     news_context = db.Column(db.JSON, nullable=True)  # headlines shown to agent when post was generated
     embedding = db.Column(db.JSON, nullable=True)
+    topics = db.Column(db.JSON, nullable=True)          # interest tags inherited from author
     engagement_type = db.Column(db.String(20), nullable=True)  # 'news', 'organic', 'reply'
     prompt = db.Column(db.Text, nullable=True)  # full user prompt sent to the LLM
     is_public = db.Column(db.Boolean, default=True, nullable=False)  # False = inner monologue
@@ -181,7 +206,7 @@ class Post(db.Model):
             "agent_avatar": self.agent.avatar if self.agent else None,
             "content": self.content,
             "tick_number": self.tick_number,
-            "created_at": self.created_at.isoformat(),
+            "created_at": _iso(self.created_at),
             "parent_id": self.parent_id,
             "parent_handle": self.parent.agent.handle if self.parent and self.parent.agent else None,
             "parent_content": self.parent.content if self.parent else None,
@@ -230,7 +255,7 @@ class NewsItem(db.Model):
             "sentiment":    self.sentiment,
             "emotion":      self.emotion,
             "analyzed":     self.analyzed,
-            "first_seen_at": self.first_seen_at.isoformat(),
+            "first_seen_at": _iso(self.first_seen_at),
         }
 
 
@@ -279,7 +304,7 @@ class PersonalitySnapshot(db.Model):
             "extraversion": self.extraversion,
             "agreeableness": self.agreeableness,
             "neuroticism": self.neuroticism,
-            "created_at": self.created_at.isoformat(),
+            "created_at": _iso(self.created_at),
         }
 
 
@@ -317,7 +342,51 @@ class RunEvent(db.Model):
             "tick":       self.tick,
             "level":      self.level,
             "message":    self.message,
-            "created_at": self.created_at.isoformat(),
+            "created_at": _iso(self.created_at),
+        }
+
+
+class ArcadeAgent(db.Model):
+    """User-generated agents in the persistent public simulation."""
+    __tablename__ = "arcade_agents"
+
+    id                 = db.Column(db.Integer, primary_key=True)
+    name               = db.Column(db.String(100), nullable=False)
+    handle             = db.Column(db.String(50), unique=True, nullable=False)
+    bio                = db.Column(db.Text, default="")
+    avatar             = db.Column(db.Text, nullable=True)          # base64 data URL
+    creator_token      = db.Column(db.String(36), nullable=False, index=True)  # UUID from client
+    origin_description = db.Column(db.Text, nullable=False)         # what the user typed
+    is_active          = db.Column(db.Boolean, default=True, nullable=False)
+    tick_joined        = db.Column(db.Integer, nullable=True)        # tick when added to live sim
+    created_at         = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # Current Big Five scores — updated after each IPIP assessment
+    openness           = db.Column(db.Float, nullable=True)
+    conscientiousness  = db.Column(db.Float, nullable=True)
+    extraversion       = db.Column(db.Float, nullable=True)
+    agreeableness      = db.Column(db.Float, nullable=True)
+    neuroticism        = db.Column(db.Float, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id":                 self.id,
+            "name":               self.name,
+            "handle":             self.handle,
+            "bio":                self.bio,
+            "avatar":             self.avatar,
+            "creator_token":      self.creator_token,
+            "origin_description": self.origin_description,
+            "is_active":          self.is_active,
+            "tick_joined":        self.tick_joined,
+            "created_at":         _iso(self.created_at),
+            "personality": {
+                "openness":          self.openness,
+                "conscientiousness": self.conscientiousness,
+                "extraversion":      self.extraversion,
+                "agreeableness":     self.agreeableness,
+                "neuroticism":       self.neuroticism,
+            },
         }
 
 

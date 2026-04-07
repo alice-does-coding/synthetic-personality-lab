@@ -63,8 +63,14 @@ export const api = {
   thread:    (postId)              => req(`/posts/${postId}/thread`),
   ghostPost: (runId, content)     => adminReq("/posts/ghost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId, content }) }),
 
+  // arcade
+  arcadeRun:    ()        => req("/arcade/run"),
+  arcadeCreate: (body)    => req("/arcade/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  arcadeMine:   (token)   => req(`/arcade/agents/mine?creator_token=${encodeURIComponent(token)}`),
+  arcadeList:   ()        => req("/arcade/agents"),
+
   // runs
-  listRuns:    ()        => req("/runs/"),
+  listRuns:    ()        => adminReq("/runs/"),
   getRunEvents: (id)    => req(`/runs/${id}/events`),
   listPersonas: ()       => req("/runs/personas"),
   createRun:   (body)    => adminReq("/runs/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),

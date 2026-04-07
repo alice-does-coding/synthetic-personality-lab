@@ -26,11 +26,15 @@ _stats_api      = 0.0   # total seconds spent waiting for Mistral to respond
 _auth_failed = threading.Event()
 
 
-def reset_stats():
+def reset_stats(clear_auth_latch=False):
+    """Reset per-tick call stats. Auth latch is NOT cleared by default — it persists
+    across ticks so we don't waste a call retrying a known-bad key every tick.
+    Pass clear_auth_latch=True to allow Mistral to be retried (e.g. hourly)."""
     global _stats_calls, _stats_throttle, _stats_api
     with _stats_lock:
         _stats_calls = _stats_throttle = _stats_api = 0
-    _auth_failed.clear()
+    if clear_auth_latch:
+        _auth_failed.clear()
 
 
 def read_stats():

@@ -10,9 +10,11 @@ import News from "./pages/News";
 import Runs from "./pages/Runs";
 import About from "./pages/About";
 import Prompts from "./pages/Prompts";
+import CreateAgent from "./pages/CreateAgent";
 import { api } from "./api";
 import { RunProvider, useRun } from "./RunContext";
 import { AdminProvider, useAdmin } from "./AdminContext";
+import { ArcadeProvider } from "./ArcadeContext";
 import "./App.css";
 
 function useDarkMode() {
@@ -34,14 +36,7 @@ function SimStatus() {
   const isRunning = runningRunIds.includes(viewingRun.id);
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text)", fontFamily: "var(--mono)", minWidth: 0 }}>
-      <span style={{
-        color: "var(--text-h)", fontWeight: 700,
-        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        maxWidth: 120,
-      }} title={viewingRun.name}>
-        {viewingRun.name}
-      </span>
-      <span style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
+      <span style={{ whiteSpace: "nowrap", flexShrink: 0, color: "var(--text-h)", fontWeight: 700 }}>
         t{viewingRun.last_tick ?? "—"}
         <span style={{
           display: "inline-block",
@@ -75,7 +70,7 @@ function Header({ dark, setDark, onAdminClick, isAdmin }) {
             Social
           </NavLink>
           <NavLink to="/social" end className="subnav-link">Timeline</NavLink>
-          <NavLink to="/social/agents" className="subnav-link">Robots</NavLink>
+          <NavLink to="/social/agents" className="subnav-link">Agents</NavLink>
 
           {/* Divider */}
           <span className="nav-divider" />
@@ -84,10 +79,10 @@ function Header({ dark, setDark, onAdminClick, isAdmin }) {
           <NavLink to="/lab" className={`section-tab${inLab ? " section-active" : ""}`}>
             Lab
           </NavLink>
-          <NavLink to="/lab" end className="subnav-link">Drift</NavLink>
+          <NavLink to="/lab" end className="subnav-link">Population</NavLink>
           <NavLink to="/lab/network" className="subnav-link">Network</NavLink>
           <NavLink to="/lab/news" className="subnav-link">News</NavLink>
-          <NavLink to="/lab/runs" className="subnav-link">Runs</NavLink>
+          {isAdmin && <NavLink to="/lab/runs" className="subnav-link">Runs</NavLink>}
           <NavLink to="/lab/about" className="subnav-link">About</NavLink>
 
           <span className="nav-divider" />
@@ -333,6 +328,21 @@ function Footer() {
     }}>
       <span style={{ color: "var(--text)", letterSpacing: "0.06em" }}>
         lurkr · ongoing experiment · 2026
+        <NavLink
+          to="/create"
+          style={{
+            marginLeft: 16,
+            color: "var(--text)",
+            textDecoration: "none",
+            opacity: 0.25,
+            transition: "opacity 0.3s",
+            letterSpacing: "0.06em",
+          }}
+          onMouseEnter={e => e.currentTarget.style.opacity = 0.7}
+          onMouseLeave={e => e.currentTarget.style.opacity = 0.25}
+        >
+          join
+        </NavLink>
       </span>
       <span style={{ display: "flex", gap: 16 }}>
         <NavLink to="/lab/about" style={{ color: "var(--text)", textDecoration: "none", textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -373,6 +383,9 @@ function AppInner({ dark, setDark }) {
           <Route path="/"                      element={<Navigate to="/social" replace />} />
           <Route path="/social"                element={<Timeline />} />
           <Route path="/social/agents"         element={<Agents />} />
+          <Route path="/create"                element={<CreateAgent />} />
+          <Route path="/join"                  element={<Navigate to="/create" replace />} />
+          <Route path="/social/create"         element={<Navigate to="/create" replace />} />
           <Route path="/social/agents/:id"     element={<AgentProfile />} />
           <Route path="/social/thread/:id"     element={<Thread />} />
           <Route path="/lab/about"             element={<About />} />
@@ -382,7 +395,7 @@ function AppInner({ dark, setDark }) {
           <Route path="/lab"                   element={<Population />} />
           <Route path="/lab/network"           element={<Graph />} />
           <Route path="/lab/news"              element={<News />} />
-          <Route path="/lab/runs"              element={<Runs />} />
+          <Route path="/lab/runs"              element={isAdmin ? <Runs /> : <Navigate to="/lab" replace />} />
           {/* Legacy redirects */}
           <Route path="/agents"                element={<Navigate to="/social/agents" replace />} />
           <Route path="/population"            element={<Navigate to="/lab" replace />} />
@@ -403,7 +416,9 @@ export default function App() {
     <BrowserRouter>
       <AdminProvider>
         <RunProvider>
-          <AppInner dark={dark} setDark={setDark} />
+          <ArcadeProvider>
+            <AppInner dark={dark} setDark={setDark} />
+          </ArcadeProvider>
         </RunProvider>
       </AdminProvider>
     </BrowserRouter>
