@@ -3,7 +3,7 @@ import { api } from "./api";
 
 const RunContext = createContext(null);
 
-const VIEWING_KEY = "lurkr_viewing_run_id";
+const VIEWING_KEY = "spl_viewing_run_id";
 
 export function RunProvider({ children }) {
   const [runs, setRuns] = useState([]);

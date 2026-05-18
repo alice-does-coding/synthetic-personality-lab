@@ -7,7 +7,7 @@
   <line x1="600" y1="0" x2="600" y2="630" stroke="#ffffff" stroke-width="0.5" opacity="0.05"/>
 
   <!-- glasses icon — scaled up, centered -->
-  <g transform="translate(600, 260) scale(7)">
+  <g transform="translate(600, 240) scale(7)">
     <circle cx="-7" cy="0" r="6" fill="none" stroke="#ff3ea5" stroke-width="2.5"/>
     <circle cx="7"  cy="0" r="6" fill="none" stroke="#ff3ea5" stroke-width="2.5"/>
     <line x1="-1" y1="0" x2="1"  y2="0"  stroke="#ff3ea5" stroke-width="2.5"/>
@@ -17,16 +17,16 @@
 
   <!-- wordmark -->
   <text
-    x="600" y="390"
-    font-family="monospace" font-size="72" font-weight="700"
-    letter-spacing="0.15em"
+    x="600" y="400"
+    font-family="monospace" font-size="56" font-weight="700"
+    letter-spacing="0.12em"
     fill="#ffffff"
     text-anchor="middle"
-  >LURKR</text>
+  >Synthetic Personality Lab</text>
 
   <!-- tagline -->
   <text
-    x="600" y="440"
+    x="600" y="455"
     font-family="monospace" font-size="22"
     letter-spacing="0.08em"
     fill="#ff3ea5"

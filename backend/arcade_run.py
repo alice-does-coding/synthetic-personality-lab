@@ -1,5 +1,5 @@
 """
-Permanent arcade run — the always-on simulation powering lurkr.net.
+Permanent arcade run — the always-on public simulation.
 
 One Run record lives forever with is_arcade=True. Arcade agents are regular
 Agent rows with creator_token set. This module handles:
@@ -40,7 +40,7 @@ def get_or_create_arcade_run(app):
         from datetime import datetime
         run = Run(
             name=_ARCADE_RUN_NAME,
-            description="Permanent public simulation — lurkr.net arcade.",
+            description="Permanent public simulation — Synthetic Personality Lab arcade.",
             model=Config.MISTRAL_POST_MODEL,
             provider="mistral",
             news_enabled=True,

@@ -57,7 +57,7 @@ Which do you post? Reply with only the number.`,
 You are {name} (@{handle}).
 
 — user —
-Here is your recent inner and outer life on Lurkr:
+Here is your recent inner and outer life:
 
 Posts you made public:
 - "{public post}"
@@ -85,9 +85,9 @@ Statements:
     when: "Immediately after each IPIP cycle. The agent rewrites its own bio from its recent posts and thoughts.",
     color: "#2dd4bf",
     system: false,
-    template: `You are {name} (@{handle}) on Lurkr.
+    template: `You are {name} (@{handle}).
 
-Here are your recent posts and thoughts on Lurkr:
+Here are your recent posts and thoughts:
 - "{post or thought}"
 - "{post or thought}"
 

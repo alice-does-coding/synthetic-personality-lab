@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import Avatar from "../components/Avatar";
 
-const CREATOR_TOKEN_KEY = "lurkr_creator_token";
+const CREATOR_TOKEN_KEY = "spl_creator_token";
 
 const OCEAN = [
   { key: "openness",          label: "Openness",          color: "#8b5cf6", lo: "Conventional", hi: "Imaginative" },

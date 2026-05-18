@@ -131,9 +131,11 @@ def generate_avatar(bio, name=None, model=None):
 
     subject = f"{name} — {bio[:120]}" if name else bio[:180]
     prompt = (
-        f"Pixel art profile avatar of {subject}. "
-        "16-bit pixel art style, expressive character portrait, "
-        "vibrant colors, dark background, retro game aesthetic, square format."
+        f"Generate an 8-bit pixel art portrait profile picture based on this description: {subject}. "
+        "The style should be highly pixelated, with visible grid lines, limited color palette, "
+        "and sharp, blocky edges. Emphasize the retro video game aesthetic, using large, distinct pixels. "
+        "The image should look like it belongs in an early 8-bit or 16-bit era game, "
+        "with minimal detail and exaggerated features."
     )
     url = _AVATAR_URL
     headers = {

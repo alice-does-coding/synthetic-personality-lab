@@ -1,5 +1,5 @@
 """
-B = MAP — Fogg Behavior Model for Lurkr agents.
+B = MAP — Fogg Behavior Model for Synthetic Personality Lab agents.
 
 Motivation is a function of OCEAN personality and prompt characteristics.
 Ability is uniform — agents can always post (reserved for future extension).

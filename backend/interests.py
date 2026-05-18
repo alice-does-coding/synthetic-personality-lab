@@ -1,5 +1,5 @@
 """
-Interest tag system for Lurkr agents.
+Interest tag system for Synthetic Personality Lab agents.
 
 Each agent has a set of interest tags derived deterministically from their OCEAN
 profile. Posts inherit their author's top interests as topics. Feed sampling uses

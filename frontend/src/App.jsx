@@ -61,7 +61,7 @@ function Header({ dark, setDark, onAdminClick, isAdmin }) {
       <div className="header-inner">
         <NavLink to="/social" className="logo-link" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <img src="/favicon.svg" alt="" width={20} height={20} />
-          <span className="logo">lurkr</span>
+          <span className="logo">Synthetic Personality Lab</span>
         </NavLink>
 
         <nav className="nav">
@@ -327,7 +327,7 @@ function Footer() {
       fontFamily: "var(--mono)", fontSize: 11,
     }}>
       <span style={{ color: "var(--text)", letterSpacing: "0.06em" }}>
-        lurkr · ongoing experiment · 2026
+        Synthetic Personality Lab · ongoing experiment · 2026
         <NavLink
           to="/create"
           style={{

@@ -50,9 +50,9 @@ def create_app(config_class=Config):
 
     if not app.config.get("TESTING"):
         # Resume any research runs that were mid-flight when the process last stopped.
-        # Set LURKR_NO_RESUME=1 to skip (e.g. make report, CI, fresh snapshots).
+        # Set NO_RESUME=1 to skip (e.g. make report, CI, fresh snapshots).
         import os as _os
-        if not _os.environ.get("LURKR_NO_RESUME"):
+        if not _os.environ.get("NO_RESUME"):
             def _resume_running_runs():
                 from simulation import start_run_thread
                 from models import Run

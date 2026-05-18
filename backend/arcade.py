@@ -1,7 +1,7 @@
 """
 Arcade agent generation service.
 
-Creates user-submitted agents for the permanent public simulation on lurkr.net.
+Creates user-submitted agents for the permanent public simulation (the Arcade).
 Each pseudo-anon creator (UUID token stored client-side) gets one agent.
 Agents are regular Agent rows — creator_token marks them as arcade-owned.
 

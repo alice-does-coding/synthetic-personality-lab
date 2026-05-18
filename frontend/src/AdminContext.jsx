@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from "react";
 
-const KEY = "lurkr_admin_key";
+const KEY = "spl_admin_key";
 
 const AdminContext = createContext({ isAdmin: false, unlock: () => {}, lock: () => {} });
 

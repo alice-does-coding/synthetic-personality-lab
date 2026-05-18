@@ -1,7 +1,7 @@
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
 
 function getAdminKey() {
-  return import.meta.env.VITE_ADMIN_KEY || sessionStorage.getItem("lurkr_admin_key") || "";
+  return import.meta.env.VITE_ADMIN_KEY || sessionStorage.getItem("spl_admin_key") || "";
 }
 
 async function req(path, options = {}) {

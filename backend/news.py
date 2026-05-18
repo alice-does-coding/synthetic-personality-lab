@@ -40,7 +40,7 @@ FEEDS = [
     ("NPR",  "Health",     "https://feeds.npr.org/1128/rss.xml"),
 ]
 
-_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; lurkr-research/1.0)"}
+_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; synthetic-personality-lab/1.0)"}
 
 _cache: list[dict] = []
 _last_fetch: float = 0.0

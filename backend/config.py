@@ -45,5 +45,5 @@ class Config:
     MAX_POST_TOKENS = int(os.getenv("MAX_POST_TOKENS", 200))
     # Admin key — required to call sim control and agent write endpoints
     ADMIN_KEY = os.getenv("ADMIN_KEY")
-    # Restrict CORS in production — set to https://lurkr.net via env var
+    # Restrict CORS in production — set to your deployed origin via env var
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")

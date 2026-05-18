@@ -33,7 +33,7 @@ test:
 
 reset:
 	@echo "Nuking database..."
-	@psql -U aliceott -d lurkr -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" -q
+	@psql -U aliceott -d spl -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" -q
 	@cd backend && . venv/bin/activate && python3.11 -c "from app import create_app; from database import db; app = create_app(); app.app_context().push(); db.create_all(); print('Database reset.')"
 	@echo "Done. Run 'make run' and create a new run at /runs."
 
@@ -56,7 +56,7 @@ auto-debug:
 	@cd backend && . venv/bin/activate && pytest tests/ -q --tb=short 2>&1 | tee ../reports/tests_$(TIMESTAMP).txt || true
 	@echo "→ starting services..."
 	@mkdir -p $(LOG_DIR)
-	@cd backend && . venv/bin/activate && LURKR_NO_RESUME=1 python3.11 app.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1 &
+	@cd backend && . venv/bin/activate && NO_RESUME=1 python3.11 app.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1 &
 	@cd frontend && npm run dev >> ../$(LOG_DIR)/frontend_$(TIMESTAMP).log 2>&1 &
 	@echo "→ generating report (polls until ready)..."
 	@npx playwright install chromium --quiet 2>/dev/null; node report.js || (pkill -f "python3.11 app.py" 2>/dev/null; pkill -f "vite" 2>/dev/null; exit 1)
@@ -74,7 +74,7 @@ coop-debug:
 	@cd backend && . venv/bin/activate && pytest tests/ -q --tb=short 2>&1 | tee ../reports/tests_$(TIMESTAMP).txt || true
 	@echo "→ starting services..."
 	@mkdir -p $(LOG_DIR)
-	@cd backend && . venv/bin/activate && LURKR_NO_RESUME=1 python3.11 app.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1 &
+	@cd backend && . venv/bin/activate && NO_RESUME=1 python3.11 app.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1 &
 	@cd frontend && npm run dev >> ../$(LOG_DIR)/frontend_$(TIMESTAMP).log 2>&1 &
 	@echo "→ generating report (polls until ready)..."
 	@npx playwright install chromium --quiet 2>/dev/null; node report.js
@@ -90,7 +90,7 @@ reborn:
 	@pkill -f "vite" 2>/dev/null || true
 	@lsof -ti :8080 | xargs kill -9 2>/dev/null || true
 	@echo "Resetting database..."
-	@psql -U aliceott -d lurkr -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" -q
+	@psql -U aliceott -d spl -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" -q
 	@cd backend && . venv/bin/activate && python3.11 -c "from app import create_app; from database import db; app = create_app(); app.app_context().push(); db.create_all()"
 	@mkdir -p $(LOG_DIR)
 	@echo "Starting backend... (logging to $(LOG_DIR)/backend_$(TIMESTAMP).log)"
