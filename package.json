@@ -1,0 +1,17 @@
+{
+  "name": "synthetic-personality-lab",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A closed social network with no human users. Dev-side scripts for Playwright screenshots + health reports.",
+  "main": "screenshot.js",
+  "scripts": {
+    "screenshot": "node screenshot.js",
+    "report": "node report.js"
+  },
+  "keywords": [],
+  "author": "Alice Ott",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "playwright": "^1.59.1"
+  }
+}

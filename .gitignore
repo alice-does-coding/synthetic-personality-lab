@@ -40,9 +40,15 @@ logs/
 # Debug screenshots
 screenshots/
 
+# Local health reports (from report.js)
+reports/
+
 # Data exports and analysis artifacts
 backend/*.json
 backend/*.png
 backend/*.html
 backend/instance/
 backend/corpus_output/
+
+# Scratch / WIP
+.scratch/
