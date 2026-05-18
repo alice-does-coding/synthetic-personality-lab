@@ -1,7 +1,7 @@
 """
-Tests for arcade agent creation seed modes.
+Tests for public-run agent creation seed modes.
 
-Covers the three seed paths added to POST /api/arcade/agents:
+Covers the three seed paths added to POST /api/simulation/agents:
   describe — name + description → LLM bio + random OCEAN  (default / legacy)
   random   — LLM generates name, bio, and OCEAN            (surprise me)
   scratch  — caller supplies name, bio, and OCEAN directly (full control)
@@ -39,8 +39,8 @@ def app():
 def db(app):
     with app.app_context():
         _db.create_all()
-        from arcade_run import get_or_create_arcade_run
-        get_or_create_arcade_run(app)
+        from simulation_run import get_or_create_public_run
+        get_or_create_public_run(app)
         yield _db
         _db.session.remove()
         _db.drop_all()
@@ -75,8 +75,8 @@ def scratch_payload(**overrides):
 
 class TestDescribeMode:
     def test_omitted_seed_mode_defaults_to_describe(self, client):
-        with patch("arcade._generate_bio", return_value="A bio."):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_bio", return_value="A bio."):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "name":          "Echo Delta",
                 "description":   "A restless signal bouncing through empty spaces.",
@@ -84,8 +84,8 @@ class TestDescribeMode:
         assert resp.status_code == 201
 
     def test_explicit_describe_mode(self, client):
-        with patch("arcade._generate_bio", return_value="A bio."):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_bio", return_value="A bio."):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "describe",
                 "name":          "Echo Delta",
@@ -94,8 +94,8 @@ class TestDescribeMode:
         assert resp.status_code == 201
 
     def test_describe_bio_comes_from_llm(self, client):
-        with patch("arcade._generate_bio", return_value="Haunting the margins."):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_bio", return_value="Haunting the margins."):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "name":          "Wraith",
                 "description":   "A wanderer who prefers shadows to spotlight.",
@@ -103,8 +103,8 @@ class TestDescribeMode:
         assert resp.get_json()["bio"] == "Haunting the margins."
 
     def test_describe_missing_name_returns_400(self, client):
-        with patch("arcade._generate_bio", return_value="bio"):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_bio", return_value="bio"):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "describe",
                 "description":   "At least ten characters here.",
@@ -112,8 +112,8 @@ class TestDescribeMode:
         assert resp.status_code == 400
 
     def test_describe_short_description_returns_400(self, client):
-        with patch("arcade._generate_bio", return_value="bio"):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_bio", return_value="bio"):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "describe",
                 "name":          "Someone",
@@ -126,16 +126,16 @@ class TestDescribeMode:
 
 class TestRandomMode:
     def test_random_returns_201(self, client):
-        with patch("arcade._generate_random_agent", return_value=_RANDOM_AGENT):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_random_agent", return_value=_RANDOM_AGENT):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "random",
             })
         assert resp.status_code == 201
 
     def test_random_response_shape(self, client):
-        with patch("arcade._generate_random_agent", return_value=_RANDOM_AGENT):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_random_agent", return_value=_RANDOM_AGENT):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "random",
             })
@@ -147,8 +147,8 @@ class TestRandomMode:
             assert trait in data["personality"]
 
     def test_random_uses_llm_name_and_bio(self, client):
-        with patch("arcade._generate_random_agent", return_value=_RANDOM_AGENT):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_random_agent", return_value=_RANDOM_AGENT):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "random",
             })
@@ -157,8 +157,8 @@ class TestRandomMode:
         assert data["bio"]  == "I argue with economists online before my morning chai."
 
     def test_random_uses_llm_ocean_scores(self, client):
-        with patch("arcade._generate_random_agent", return_value=_RANDOM_AGENT):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_random_agent", return_value=_RANDOM_AGENT):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "random",
             })
@@ -169,8 +169,8 @@ class TestRandomMode:
 
     def test_random_no_extra_fields_needed(self, client):
         """Only creator_token + seed_mode required — no name or description."""
-        with patch("arcade._generate_random_agent", return_value=_RANDOM_AGENT):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_random_agent", return_value=_RANDOM_AGENT):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "random",
             })
@@ -178,15 +178,15 @@ class TestRandomMode:
 
     def test_random_duplicate_token_rejected(self, client):
         t = token()
-        with patch("arcade._generate_random_agent", return_value=_RANDOM_AGENT):
-            client.post("/api/arcade/agents", json={"creator_token": t, "seed_mode": "random"})
-            resp = client.post("/api/arcade/agents", json={"creator_token": t, "seed_mode": "random"})
+        with patch("simulation._generate_random_agent", return_value=_RANDOM_AGENT):
+            client.post("/api/simulation/agents", json={"creator_token": t, "seed_mode": "random"})
+            resp = client.post("/api/simulation/agents", json={"creator_token": t, "seed_mode": "random"})
         assert resp.status_code == 400
         assert "already have an agent" in resp.get_json()["error"]
 
     def test_random_origin_description_is_null(self, client):
-        with patch("arcade._generate_random_agent", return_value=_RANDOM_AGENT):
-            resp = client.post("/api/arcade/agents", json={
+        with patch("simulation._generate_random_agent", return_value=_RANDOM_AGENT):
+            resp = client.post("/api/simulation/agents", json={
                 "creator_token": token(),
                 "seed_mode":     "random",
             })
@@ -197,11 +197,11 @@ class TestRandomMode:
 
 class TestScratchMode:
     def test_scratch_returns_201(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload())
+        resp = client.post("/api/simulation/agents", json=scratch_payload())
         assert resp.status_code == 201
 
     def test_scratch_preserves_name_and_bio(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(
+        resp = client.post("/api/simulation/agents", json=scratch_payload(
             name="Zephyr Moss",
             bio="Former librarian turned competitive eater. I contain multitudes.",
         ))
@@ -210,7 +210,7 @@ class TestScratchMode:
         assert data["bio"]  == "Former librarian turned competitive eater. I contain multitudes."
 
     def test_scratch_preserves_ocean_scores(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(
+        resp = client.post("/api/simulation/agents", json=scratch_payload(
             openness=82, conscientiousness=31, extraversion=74,
             agreeableness=58, neuroticism=45,
         ))
@@ -222,79 +222,79 @@ class TestScratchMode:
         assert p["neuroticism"]       == 45.0
 
     def test_scratch_accepts_float_ocean(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(openness=72.5))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(openness=72.5))
         assert resp.status_code == 201
         assert resp.get_json()["personality"]["openness"] == 72.5
 
     def test_scratch_missing_name_returns_400(self, client):
         p = scratch_payload()
         del p["name"]
-        resp = client.post("/api/arcade/agents", json=p)
+        resp = client.post("/api/simulation/agents", json=p)
         assert resp.status_code == 400
 
     def test_scratch_empty_name_returns_400(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(name=""))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(name=""))
         assert resp.status_code == 400
 
     def test_scratch_name_too_long_returns_400(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(name="x" * 51))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(name="x" * 51))
         assert resp.status_code == 400
 
     def test_scratch_missing_bio_returns_400(self, client):
         p = scratch_payload()
         del p["bio"]
-        resp = client.post("/api/arcade/agents", json=p)
+        resp = client.post("/api/simulation/agents", json=p)
         assert resp.status_code == 400
 
     def test_scratch_empty_bio_returns_400(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(bio=""))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(bio=""))
         assert resp.status_code == 400
 
     def test_scratch_missing_ocean_trait_returns_400(self, client):
         p = scratch_payload()
         del p["openness"]
-        resp = client.post("/api/arcade/agents", json=p)
+        resp = client.post("/api/simulation/agents", json=p)
         assert resp.status_code == 400
         assert "openness" in resp.get_json()["error"]
 
     def test_scratch_ocean_below_zero_returns_400(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(neuroticism=-1))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(neuroticism=-1))
         assert resp.status_code == 400
 
     def test_scratch_ocean_above_100_returns_400(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(extraversion=101))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(extraversion=101))
         assert resp.status_code == 400
 
     def test_scratch_ocean_boundary_zero_accepted(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(openness=0))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(openness=0))
         assert resp.status_code == 201
 
     def test_scratch_ocean_boundary_100_accepted(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload(conscientiousness=100))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(conscientiousness=100))
         assert resp.status_code == 201
 
     def test_scratch_duplicate_token_rejected(self, client):
         t = token()
-        client.post("/api/arcade/agents", json=scratch_payload(creator_token=t))
-        resp = client.post("/api/arcade/agents", json=scratch_payload(creator_token=t))
+        client.post("/api/simulation/agents", json=scratch_payload(creator_token=t))
+        resp = client.post("/api/simulation/agents", json=scratch_payload(creator_token=t))
         assert resp.status_code == 400
 
     def test_scratch_no_llm_called(self, client):
         """Scratch mode must not touch the LLM at all."""
-        with patch("arcade._generate_bio", side_effect=AssertionError("LLM called in scratch mode")):
-            with patch("arcade._generate_random_agent", side_effect=AssertionError("LLM called in scratch mode")):
-                resp = client.post("/api/arcade/agents", json=scratch_payload())
+        with patch("simulation._generate_bio", side_effect=AssertionError("LLM called in scratch mode")):
+            with patch("simulation._generate_random_agent", side_effect=AssertionError("LLM called in scratch mode")):
+                resp = client.post("/api/simulation/agents", json=scratch_payload())
         assert resp.status_code == 201
 
     def test_scratch_origin_description_is_null(self, client):
-        resp = client.post("/api/arcade/agents", json=scratch_payload())
+        resp = client.post("/api/simulation/agents", json=scratch_payload())
         assert resp.get_json()["origin_description"] is None
 
 
 # ── Invalid seed_mode ─────────────────────────────────────────────────────────
 
 def test_invalid_seed_mode_returns_400(client):
-    resp = client.post("/api/arcade/agents", json={
+    resp = client.post("/api/simulation/agents", json={
         "creator_token": token(),
         "seed_mode":     "vibes_only",
     })

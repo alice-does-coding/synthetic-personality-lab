@@ -38,7 +38,7 @@ def create_app(config_class=Config):
     from routes.news import news_bp
     from routes.nlp import nlp_bp
     from routes.runs import runs_bp
-    from routes.arcade import arcade_bp
+    from routes.simulation import simulation_bp
 
     app.register_blueprint(agents_bp, url_prefix="/api/agents")
     app.register_blueprint(posts_bp, url_prefix="/api/posts")
@@ -46,7 +46,7 @@ def create_app(config_class=Config):
     app.register_blueprint(news_bp, url_prefix="/api/news")
     app.register_blueprint(nlp_bp, url_prefix="/api/nlp")
     app.register_blueprint(runs_bp, url_prefix="/api/runs")
-    app.register_blueprint(arcade_bp, url_prefix="/api/arcade")
+    app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
 
     if not app.config.get("TESTING"):
         # Resume any research runs that were mid-flight when the process last stopped.
@@ -54,21 +54,21 @@ def create_app(config_class=Config):
         import os as _os
         if not _os.environ.get("NO_RESUME"):
             def _resume_running_runs():
-                from simulation import start_run_thread
+                from engine import start_run_thread
                 from models import Run
                 with app.app_context():
-                    running = Run.query.filter_by(status="running", is_arcade=False).all()
+                    running = Run.query.filter_by(status="running", is_public=False).all()
                     for run in running:
                         start_run_thread(app, run.id)
 
             threading.Thread(target=_resume_running_runs, daemon=True).start()
 
-        from simulation import start_news_analyzer, start_post_analyzer
+        from engine import start_news_analyzer, start_post_analyzer
         start_news_analyzer(app)
         start_post_analyzer(app)
 
-        from arcade_run import start_arcade_loop
-        start_arcade_loop(app)
+        from simulation_run import start_public_loop
+        start_public_loop(app)
 
     return app
 

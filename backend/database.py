@@ -10,9 +10,9 @@ _MIGRATIONS = [
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS error TEXT",
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS provider VARCHAR(50) NOT NULL DEFAULT 'mistral'",
     "ALTER TABLE agents ADD COLUMN IF NOT EXISTS avatar TEXT",
-    # 2026-04-06 — behavior model + arcade
+    # 2026-04-06 — behavior model + public simulation
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS behavior_model VARCHAR(50)",
-    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_arcade BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE",
     "ALTER TABLE agents ADD COLUMN IF NOT EXISTS creator_token VARCHAR(36)",
     "ALTER TABLE agents ADD COLUMN IF NOT EXISTS origin_description TEXT",
     "ALTER TABLE agents ADD COLUMN IF NOT EXISTS expires_at_tick INTEGER",

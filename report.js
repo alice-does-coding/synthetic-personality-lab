@@ -34,7 +34,7 @@ const PAGES = [
 ];
 
 const API_CHECKS = [
-  { name: "arcade run",    path: "/arcade/run"    },
+  { name: "simulation run",    path: "/simulation/run"    },
   { name: "runs list",     path: "/runs/"         },
   { name: "agents list",   path: "/agents/"       },
   { name: "sim status",    path: "/sim/status"    },
@@ -68,11 +68,11 @@ async function waitForBackend(maxWaitMs = 120000) {
     await new Promise(r => setTimeout(r, 1000));
     if (Date.now() - start >= maxWaitMs) { process.stdout.write(" TIMED OUT\n"); return false; }
   }
-  // Phase 2: wait for arcade/run to respond (may be blocked during IPIP)
-  process.stdout.write("→ waiting for arcade run endpoint");
+  // Phase 2: wait for simulation/run to respond (may be blocked during IPIP)
+  process.stdout.write("→ waiting for simulation run endpoint");
   while (Date.now() - start < maxWaitMs) {
     try {
-      const r = await httpGet(`${API_BASE}/arcade/run`, 5000);
+      const r = await httpGet(`${API_BASE}/simulation/run`, 5000);
       if (r.status < 500) { process.stdout.write(" ready\n"); return true; }
     } catch { /* still blocked */ }
     process.stdout.write(".");
@@ -163,7 +163,7 @@ async function waitForFrontend(maxWaitMs = 30000) {
           const el = document.querySelector("main") || document.querySelector(".main") || document.body;
           return el.innerText.trim().slice(0, 300);
         });
-        const isLoading = mainText.includes("Loading") || mainText === "" || mainText.includes("Arcade not available");
+        const isLoading = mainText.includes("Loading") || mainText === "" || mainText.includes("Simulation not available");
         const hasError  = errors.length > 0;
 
         shotResults.push({ name, section, ok: !isLoading, isLoading, errors: [...errors], file });

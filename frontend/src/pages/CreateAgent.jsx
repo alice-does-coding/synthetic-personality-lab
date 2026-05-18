@@ -341,7 +341,7 @@ export default function CreateAgent() {
           neuroticism: formData.neuroticism,
         };
       }
-      const result = await api.arcadeCreate(body);
+      const result = await api.simulationCreate(body);
       localStorage.setItem(CREATOR_TOKEN_KEY, creator_token);
       setAgent(result);
       setStep("done");

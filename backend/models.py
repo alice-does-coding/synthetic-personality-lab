@@ -35,7 +35,7 @@ class Run(db.Model):
     behavior_model    = db.Column(db.String(50), nullable=True, default=None)
     # null / None  — random baseline (legacy behavior: 70% reply, 40% news)
     # "map"        — Fogg B=MAP, personality-driven prompt selection
-    is_arcade         = db.Column(db.Boolean, default=False, nullable=False)
+    is_public         = db.Column(db.Boolean, default=False, nullable=False)
     status            = db.Column(db.String(20), nullable=False, default="pending")
     last_tick         = db.Column(db.Integer, default=0, nullable=False)
     # pending   — queued, seeding not started
@@ -80,7 +80,7 @@ class Run(db.Model):
             "name_pool":         self.name_pool,
             "ghost_post_id":     self.ghost_post_id,
             "behavior_model":    self.behavior_model,
-            "is_arcade":         self.is_arcade,
+            "is_public":         self.is_public,
             "status":            self.status,
             "last_tick":         self.last_tick,
             "error":             self.error,
@@ -103,7 +103,7 @@ class Agent(db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    # Arcade-only fields — null on research agents
+    # Public-run fields — null on research-run agents
     creator_token      = db.Column(db.String(36), nullable=True, index=True)  # UUID from client
     origin_description = db.Column(db.Text, nullable=True)   # what the user typed
     expires_at         = db.Column(db.DateTime, nullable=True) # null = never expires
@@ -343,50 +343,6 @@ class RunEvent(db.Model):
             "level":      self.level,
             "message":    self.message,
             "created_at": _iso(self.created_at),
-        }
-
-
-class ArcadeAgent(db.Model):
-    """User-generated agents in the persistent public simulation."""
-    __tablename__ = "arcade_agents"
-
-    id                 = db.Column(db.Integer, primary_key=True)
-    name               = db.Column(db.String(100), nullable=False)
-    handle             = db.Column(db.String(50), unique=True, nullable=False)
-    bio                = db.Column(db.Text, default="")
-    avatar             = db.Column(db.Text, nullable=True)          # base64 data URL
-    creator_token      = db.Column(db.String(36), nullable=False, index=True)  # UUID from client
-    origin_description = db.Column(db.Text, nullable=False)         # what the user typed
-    is_active          = db.Column(db.Boolean, default=True, nullable=False)
-    tick_joined        = db.Column(db.Integer, nullable=True)        # tick when added to live sim
-    created_at         = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    # Current Big Five scores — updated after each IPIP assessment
-    openness           = db.Column(db.Float, nullable=True)
-    conscientiousness  = db.Column(db.Float, nullable=True)
-    extraversion       = db.Column(db.Float, nullable=True)
-    agreeableness      = db.Column(db.Float, nullable=True)
-    neuroticism        = db.Column(db.Float, nullable=True)
-
-    def to_dict(self):
-        return {
-            "id":                 self.id,
-            "name":               self.name,
-            "handle":             self.handle,
-            "bio":                self.bio,
-            "avatar":             self.avatar,
-            "creator_token":      self.creator_token,
-            "origin_description": self.origin_description,
-            "is_active":          self.is_active,
-            "tick_joined":        self.tick_joined,
-            "created_at":         _iso(self.created_at),
-            "personality": {
-                "openness":          self.openness,
-                "conscientiousness": self.conscientiousness,
-                "extraversion":      self.extraversion,
-                "agreeableness":     self.agreeableness,
-                "neuroticism":       self.neuroticism,
-            },
         }
 
 

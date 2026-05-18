@@ -30,7 +30,7 @@ def _hf_fallback(messages, max_tokens, temperature):
 def chat(provider, model, messages, max_tokens, temperature):
     """Route a chat call to the correct provider.
 
-    Falls back to HF automatically on auth failure so the arcade keeps running
+    Falls back to HF automatically on auth failure so the simulation keeps running
     even when the primary provider (Mistral) has a billing/key issue.
 
     Returns:

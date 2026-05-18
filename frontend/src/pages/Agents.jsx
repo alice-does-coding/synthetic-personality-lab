@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { useArcade } from "../ArcadeContext";
+import { useSimulation } from "../SimulationContext";
 import Avatar from "../components/Avatar";
 
 const TRAIT_COLORS = {
@@ -66,28 +66,28 @@ function AgentCard({ agent }) {
 }
 
 export default function Agents() {
-  const { arcadeRunId, arcadeLoaded } = useArcade();
+  const { simulationRunId, simulationLoaded } = useSimulation();
   const [agents, setAgents]   = useState([]);
   const [sort, setSort]       = useState("name");
   const [error, setError]     = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!arcadeRunId) return;
+    if (!simulationRunId) return;
     setLoading(true);
-    api.listAgents(arcadeRunId)
+    api.listAgents(simulationRunId)
       .then(setAgents)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [arcadeRunId]);
+  }, [simulationRunId]);
 
   const sorted = [...agents].sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name);
     return a.id - b.id;
   });
 
-  if (!arcadeLoaded) return <p className="muted">Loading…</p>;
-  if (!arcadeRunId)  return <p className="muted">Arcade not available.</p>;
+  if (!simulationLoaded) return <p className="muted">Loading…</p>;
+  if (!simulationRunId)  return <p className="muted">Simulation not available.</p>;
   if (loading) return <p className="muted">Loading…</p>;
 
   return (

@@ -1,5 +1,5 @@
 """
-Unit tests for arcade.py — agent generation service.
+Unit tests for simulation.py — agent generation service.
 
 Tests validation, token enforcement, handle generation, and OCEAN sampling.
 LLM bio generation is patched out — we're testing the service layer, not the model.
@@ -24,9 +24,9 @@ def app():
 def db(app):
     with app.app_context():
         _db.create_all()
-        # Ensure arcade run exists for every test
-        from arcade_run import get_or_create_arcade_run
-        get_or_create_arcade_run(app)
+        # Ensure public run exists for every test
+        from simulation_run import get_or_create_public_run
+        get_or_create_public_run(app)
         yield _db
         _db.session.remove()
         _db.drop_all()
@@ -37,54 +37,54 @@ def token():
 
 
 def make_agent(app, name="Test Agent", description="A curious entity who wanders digital spaces.", creator_token=None):
-    """Call create_arcade_agent with bio generation patched out."""
+    """Call create_agent with bio generation patched out."""
     creator_token = creator_token or token()
     with app.app_context():
-        with patch("arcade._generate_bio", return_value="A curious entity."):
-            from arcade import create_arcade_agent
-            return create_arcade_agent(creator_token, name=name, description=description), creator_token
+        with patch("simulation._generate_bio", return_value="A curious entity."):
+            from simulation import create_agent
+            return create_agent(creator_token, name=name, description=description), creator_token
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
 
 def test_empty_name_raises(app):
     with app.app_context():
-        with patch("arcade._generate_bio", return_value="bio"):
-            from arcade import create_arcade_agent
+        with patch("simulation._generate_bio", return_value="bio"):
+            from simulation import create_agent
             with pytest.raises(ValueError, match="Name"):
-                create_arcade_agent(token(), name="", description="A valid description here.")
+                create_agent(token(), name="", description="A valid description here.")
 
 
 def test_name_too_long_raises(app):
     with app.app_context():
-        with patch("arcade._generate_bio", return_value="bio"):
-            from arcade import create_arcade_agent
+        with patch("simulation._generate_bio", return_value="bio"):
+            from simulation import create_agent
             with pytest.raises(ValueError, match="Name"):
-                create_arcade_agent(token(), name="x" * 51, description="A valid description here.")
+                create_agent(token(), name="x" * 51, description="A valid description here.")
 
 
 def test_description_too_short_raises(app):
     with app.app_context():
-        with patch("arcade._generate_bio", return_value="bio"):
-            from arcade import create_arcade_agent
+        with patch("simulation._generate_bio", return_value="bio"):
+            from simulation import create_agent
             with pytest.raises(ValueError, match="Description"):
-                create_arcade_agent(token(), name="Valid Name", description="too short")
+                create_agent(token(), name="Valid Name", description="too short")
 
 
 def test_description_too_long_raises(app):
     with app.app_context():
-        with patch("arcade._generate_bio", return_value="bio"):
-            from arcade import create_arcade_agent
+        with patch("simulation._generate_bio", return_value="bio"):
+            from simulation import create_agent
             with pytest.raises(ValueError, match="Description"):
-                create_arcade_agent(token(), name="Valid Name", description="x" * 501)
+                create_agent(token(), name="Valid Name", description="x" * 501)
 
 
 def test_missing_creator_token_raises(app):
     with app.app_context():
-        with patch("arcade._generate_bio", return_value="bio"):
-            from arcade import create_arcade_agent
+        with patch("simulation._generate_bio", return_value="bio"):
+            from simulation import create_agent
             with pytest.raises(ValueError, match="creator_token"):
-                create_arcade_agent("", name="Valid Name", description="A valid description here.")
+                create_agent("", name="Valid Name", description="A valid description here.")
 
 
 # ── One agent per token ───────────────────────────────────────────────────────
@@ -92,10 +92,10 @@ def test_missing_creator_token_raises(app):
 def test_one_agent_per_token(app):
     agent, t = make_agent(app)
     with app.app_context():
-        with patch("arcade._generate_bio", return_value="bio"):
-            from arcade import create_arcade_agent
+        with patch("simulation._generate_bio", return_value="bio"):
+            from simulation import create_agent
             with pytest.raises(ValueError, match="already have an agent"):
-                create_arcade_agent(t, name="Another", description="A valid description here.")
+                create_agent(t, name="Another", description="A valid description here.")
 
 
 def test_different_tokens_can_each_create(app):
@@ -178,14 +178,14 @@ def test_ocean_scores_sampled_from_population(app):
         assert len(set(e_scores)) > 1, "Extraversion scores should not all be identical"
 
 
-def test_agent_placed_in_arcade_run(app):
-    """Agent should belong to the permanent arcade run."""
+def test_agent_placed_in_public_run(app):
+    """Agent should belong to the permanent public run."""
     from models import Run
     agent, t = make_agent(app)
     with app.app_context():
         a = Agent.query.filter_by(creator_token=t).first()
         run = db_run = _db.session.get(Run, a.run_id)
-        assert run.is_arcade is True
+        assert run.is_public is True
 
 
 # ── to_dict ───────────────────────────────────────────────────────────────────

@@ -95,8 +95,8 @@ reborn:
 	@mkdir -p $(LOG_DIR)
 	@echo "Starting backend... (logging to $(LOG_DIR)/backend_$(TIMESTAMP).log)"
 	@cd backend && . venv/bin/activate && python3.11 app.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1 &
-	@echo "Seeding arcade..."
+	@echo "Seeding simulation..."
 	@sleep 3
-	@cd backend && . venv/bin/activate && python3.11 seed_arcade.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1
+	@cd backend && . venv/bin/activate && python3.11 seed_simulation.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1
 	@echo "Starting frontend..."
 	cd frontend && npm run dev; make stop

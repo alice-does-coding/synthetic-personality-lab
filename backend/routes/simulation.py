@@ -1,29 +1,29 @@
 from flask import Blueprint, jsonify, request
 
-from arcade import create_arcade_agent
+from simulation import create_agent
 from models import Agent
 
-arcade_bp = Blueprint("arcade", __name__)
+simulation_bp = Blueprint("simulation", __name__)
 
 _VALID_SEED_MODES = {"describe", "random", "scratch"}
 
 
-def _get_arcade_run_id():
+def _get_public_run_id():
     from models import Run
-    run = Run.query.filter_by(is_arcade=True).first()
+    run = Run.query.filter_by(is_public=True).first()
     return run.id if run else None
 
 
-@arcade_bp.route("/run", methods=["GET"])
+@simulation_bp.route("/run", methods=["GET"])
 def get_run():
     from models import Run
-    run = Run.query.filter_by(is_arcade=True).first()
+    run = Run.query.filter_by(is_public=True).first()
     if not run:
         return jsonify(None), 200
     return jsonify(run.to_dict())
 
 
-@arcade_bp.route("/agents", methods=["POST"])
+@simulation_bp.route("/agents", methods=["POST"])
 def submit_agent():
     data = request.get_json(silent=True) or {}
 
@@ -37,10 +37,10 @@ def submit_agent():
 
     try:
         if seed_mode == "random":
-            agent = create_arcade_agent(creator_token, seed_mode="random")
+            agent = create_agent(creator_token, seed_mode="random")
 
         elif seed_mode == "scratch":
-            agent = create_arcade_agent(
+            agent = create_agent(
                 creator_token,
                 seed_mode="scratch",
                 name=data.get("name", ""),
@@ -53,7 +53,7 @@ def submit_agent():
             )
 
         else:  # describe
-            agent = create_arcade_agent(
+            agent = create_agent(
                 creator_token,
                 seed_mode="describe",
                 name=data.get("name", ""),
@@ -66,9 +66,9 @@ def submit_agent():
     return jsonify(agent.to_dict()), 201
 
 
-@arcade_bp.route("/agents", methods=["GET"])
+@simulation_bp.route("/agents", methods=["GET"])
 def list_agents():
-    run_id = _get_arcade_run_id()
+    run_id = _get_public_run_id()
     if not run_id:
         return jsonify([])
     agents = (
@@ -81,7 +81,7 @@ def list_agents():
     return jsonify([a.to_dict() for a in agents])
 
 
-@arcade_bp.route("/agents/mine", methods=["GET"])
+@simulation_bp.route("/agents/mine", methods=["GET"])
 def my_agent():
     creator_token = request.args.get("creator_token", "")
     if not creator_token:

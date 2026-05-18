@@ -164,7 +164,7 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
 
     # ── Log seeding started ───────────────────────────────────────────────────
     from flask import current_app as _cur_app
-    from simulation import log_event
+    from engine import log_event
     _app = _cur_app._get_current_object()
     log_event(_app, run_id, "info", f"Seeding started — generating {num_agents} agents")
 
@@ -300,7 +300,7 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
         run.started_at = datetime.utcnow()
         db.session.commit()
         log_event(_app, run_id, "info", "Run started")
-        from simulation import start_run_thread
+        from engine import start_run_thread
         start_run_thread(_app, run_id)
 
     return agents_created

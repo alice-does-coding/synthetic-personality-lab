@@ -12,10 +12,10 @@ runs_bp = Blueprint("runs", __name__)
 @runs_bp.route("/", methods=["GET"])
 def list_runs():
     from models import Agent, PersonalitySnapshot, Post
-    from simulation import get_running_run_ids
+    from engine import get_running_run_ids
 
     is_admin = request.headers.get("X-Admin-Key") == current_app.config.get("ADMIN_KEY")
-    q = Run.query if is_admin else Run.query.filter_by(is_arcade=False)
+    q = Run.query if is_admin else Run.query.filter_by(is_public=False)
     runs = q.order_by(Run.id).all()
     running_ids = get_running_run_ids()
 
@@ -141,7 +141,7 @@ def start_run(run_id):
     db.session.commit()
 
     app = current_app._get_current_object()
-    from simulation import log_event, start_run_thread
+    from engine import log_event, start_run_thread
     if prev_status == "failed":
         log_event(app, run_id, "info", f"Retry initiated (previous status: {prev_status})")
     elif prev_status == "stopped":

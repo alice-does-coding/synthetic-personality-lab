@@ -8,7 +8,7 @@ sim_bp = Blueprint("sim", __name__)
 
 @sim_bp.route("/status", methods=["GET"])
 def status():
-    from simulation import get_running_run_ids
+    from engine import get_running_run_ids
     return jsonify({
         "running_run_ids":  get_running_run_ids(),
         "agents_per_tick":  Config.AGENTS_PER_TICK,
@@ -28,7 +28,7 @@ def manual_tick():
     force_ipip = data.get("force_ipip", False)
     skip_ipip  = data.get("skip_ipip",  False)
     import threading
-    from simulation import run_tick
+    from engine import run_tick
     app = current_app._get_current_object()
     threading.Thread(
         target=run_tick,
@@ -48,7 +48,7 @@ def manual_assess():
     if not run_id:
         return jsonify({"error": "run_id required"}), 400
     import threading
-    from simulation import run_tick
+    from engine import run_tick
     app = current_app._get_current_object()
     threading.Thread(
         target=run_tick,

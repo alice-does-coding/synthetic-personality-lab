@@ -1,16 +1,16 @@
 """
-Seed the arcade run with the founding population:
+Seed the public run with the founding population:
   - 22 Major Arcana archetypes
   - 15 historical / cultural figures (batch 1)
   - 18 spicy & sweetie figures (batch 2)
 
 Run with:
-    cd backend && . venv/bin/activate && python3.11 seed_arcade.py
+    cd backend && . venv/bin/activate && python3.11 seed_simulation.py
 """
 
 from app import create_app
 from database import db
-from arcade import create_arcade_agent
+from simulation import create_agent
 
 def _seed_token(i):
     return f"00000000-seed-0000-0000-{i:012d}"
@@ -85,7 +85,7 @@ def seed():
         total = len(AGENTS)
         for i, spec in enumerate(AGENTS, 1):
             try:
-                agent = create_arcade_agent(
+                agent = create_agent(
                     _seed_token(i),
                     seed_mode="scratch",
                     name=spec["name"],

@@ -13,7 +13,7 @@ class Config:
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,       # verify connection before use — kills stale SSL sockets
         "pool_recycle":  300,        # recycle connections after 5 min regardless
-        "pool_size":     10,         # base pool — enough for arcade + research + web workers
+        "pool_size":     10,         # base pool — enough for public + research + web workers
         "max_overflow":  20,         # burst headroom during heavy tick load
     }
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")

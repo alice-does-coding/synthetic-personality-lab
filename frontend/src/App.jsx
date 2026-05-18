@@ -14,7 +14,7 @@ import CreateAgent from "./pages/CreateAgent";
 import { api } from "./api";
 import { RunProvider, useRun } from "./RunContext";
 import { AdminProvider, useAdmin } from "./AdminContext";
-import { ArcadeProvider } from "./ArcadeContext";
+import { SimulationProvider } from "./SimulationContext";
 import "./App.css";
 
 function useDarkMode() {
@@ -416,9 +416,9 @@ export default function App() {
     <BrowserRouter>
       <AdminProvider>
         <RunProvider>
-          <ArcadeProvider>
+          <SimulationProvider>
             <AppInner dark={dark} setDark={setDark} />
-          </ArcadeProvider>
+          </SimulationProvider>
         </RunProvider>
       </AdminProvider>
     </BrowserRouter>
