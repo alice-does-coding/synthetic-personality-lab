@@ -1,13 +1,16 @@
-"""Nuke all tables in prod. Run AFTER export_data.py."""
+"""
+Nuke all tables in the target database. Reads DATABASE_URL from the environment.
+
+Usage:
+  DATABASE_URL=postgres://... python nuke_db.py
+"""
+import os
+import sys
 import psycopg2
 
-DB = dict(
-    host="dpg-d780cap5pdvs739h5u10-a.oregon-postgres.render.com",
-    user="lurkr_db_user",
-    password="gogUO0RhMX5CoyZJh9xnFClnKTK8vo8I",
-    dbname="lurkr_db",
-    port=5432,
-)
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    sys.exit("DATABASE_URL is required. Refusing to run with no target.")
 
 TABLES = [
     "ipip_responses",
@@ -20,7 +23,7 @@ TABLES = [
     "runs",
 ]
 
-conn = psycopg2.connect(**DB)
+conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 cur = conn.cursor()
 

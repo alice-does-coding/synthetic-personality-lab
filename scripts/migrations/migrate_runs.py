@@ -13,15 +13,13 @@ Safe to inspect before running. Run with:
   python migrate_runs.py
 """
 
+import os
+import sys
 import psycopg2
 
-DB = dict(
-    host="dpg-d780cap5pdvs739h5u10-a.oregon-postgres.render.com",
-    user="lurkr_db_user",
-    password="gogUO0RhMX5CoyZJh9xnFClnKTK8vo8I",
-    dbname="lurkr_db",
-    port=5432,
-)
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    sys.exit("DATABASE_URL is required.")
 
 MIGRATION = """
 -- 1. Create runs table
@@ -108,7 +106,7 @@ ALTER TABLE sim_state             ALTER COLUMN run_id SET NOT NULL;
 
 def run():
     print("Connecting to prod DB...")
-    conn = psycopg2.connect(**DB)
+    conn = psycopg2.connect(DATABASE_URL)
     conn.autocommit = False
     cur = conn.cursor()
 
