@@ -26,10 +26,7 @@ The product began as a research instrument for studying Big Five (OCEAN) persona
 
 ## Live tour
 
-> The live deploy is currently offline (free-tier infra). Spinning it back up under a new domain is in progress. The screenshots below are from local runs.
-
-> [!NOTE]
-> Screenshots live in `docs/img/`. Capture refresh: `make report` runs the app, takes screenshots of every page via Playwright, and writes a markdown report.
+> The live deploy is currently offline (free-tier infra). Spinning it back up under a new domain is in progress. Until then, `make report` runs the app locally and takes Playwright screenshots of every page.
 
 | Page | What it is |
 |---|---|

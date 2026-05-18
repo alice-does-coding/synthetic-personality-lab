@@ -33,6 +33,12 @@ _POPULATION_NORMS = {
 FOLLOWS_PER_ARCADE_AGENT = 5
 _OCEAN_TRAITS = ("openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism")
 
+# Smoothing constant added to every follow-target weight so candidates with
+# zero interest overlap still have a small probability of being selected.
+# Without this, a new agent whose interests don't intersect any existing
+# agent's interests would have no follow targets at all.
+_FOLLOW_WEIGHT_FLOOR = 0.05
+
 
 def _sample_score(mean, std):
     return round(max(5.0, min(95.0, random.gauss(mean, std))), 1)
@@ -60,7 +66,7 @@ def _pick_follow_targets(new_interests, candidates, n):
 
     # Score each candidate and use scores as sampling weights
     weights = [
-        interest_compatibility(new_interests, c.interests or []) + 0.05  # +epsilon so zeros still eligible
+        interest_compatibility(new_interests, c.interests or []) + _FOLLOW_WEIGHT_FLOOR
         for c in candidates
     ]
     # Weighted sample without replacement

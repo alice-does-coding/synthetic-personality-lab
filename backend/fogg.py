@@ -24,20 +24,23 @@ BEHAVIOR_THRESHOLD = 0.30
 _NEGATIVE_CATEGORIES = {"Politics", "Business", "World", "Health"}
 _POSITIVE_CATEGORIES = {"Science", "Technology"}
 
-
-def _n(score):
-    """Normalize a 0–100 OCEAN score to 0–1, defaulting to population mean."""
-    _DEFAULTS = {"O": 60, "C": 55, "E": 50, "A": 62, "N": 45}
-    return (score or _DEFAULTS.get("O", 50)) / 100.0
+# Per-trait population means (0–100). Used as fallbacks when a snapshot is
+# missing a score — e.g. for an agent that hasn't completed its first IPIP yet.
+# Values approximate the population means reported in Johnson (2014).
+_POPULATION_MEANS = {"O": 60.0, "C": 55.0, "E": 50.0, "A": 62.0, "N": 45.0}
 
 
 def _ocean(snap):
+    """Return the agent's OCEAN profile on a 0–1 scale, with population-mean fallbacks."""
     return {
-        "O": (snap.get("openness")          or 60.0) / 100.0,
-        "C": (snap.get("conscientiousness") or 55.0) / 100.0,
-        "E": (snap.get("extraversion")      or 50.0) / 100.0,
-        "A": (snap.get("agreeableness")     or 62.0) / 100.0,
-        "N": (snap.get("neuroticism")       or 45.0) / 100.0,
+        trait: (snap.get(name) or mean) / 100.0
+        for trait, name, mean in (
+            ("O", "openness",          _POPULATION_MEANS["O"]),
+            ("C", "conscientiousness", _POPULATION_MEANS["C"]),
+            ("E", "extraversion",      _POPULATION_MEANS["E"]),
+            ("A", "agreeableness",     _POPULATION_MEANS["A"]),
+            ("N", "neuroticism",       _POPULATION_MEANS["N"]),
+        )
     }
 
 

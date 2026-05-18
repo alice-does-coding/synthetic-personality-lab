@@ -111,11 +111,3 @@ def get_headlines(n: int = 5) -> list[dict]:
     if not _cache:
         return []
     return random.sample(_cache, min(n, len(_cache)))
-
-
-def get_headlines_for_agent(snap: dict, n: int = 3) -> list[dict]:
-    """Return n headlines sampled uniformly from the cache."""
-    _refresh_if_stale()
-    if not _cache:
-        return []
-    return random.sample(_cache, min(n, len(_cache)))

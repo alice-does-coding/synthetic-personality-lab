@@ -14,12 +14,9 @@ from config import Config
 from database import db
 from ipip import ITEMS, score_responses
 from models import Agent, IpipResponse, NewsItem, PersonalitySnapshot, Post, Run
-from news import get_headlines_for_agent
+from news import get_headlines
 
 logger = logging.getLogger(__name__)
-
-# Backwards-compatible alias so any external callers still work
-MistralAuthError = LLMAuthError
 
 
 def log_event(app, run_id, level, message, tick=None):
@@ -527,12 +524,7 @@ def _agent_snapshot(agent, ghost_post=None, news_enabled=True, provider="mistral
     if behavior_model == "map":
         # B = MAP: personality × prompt → action
         from fogg import select_action
-        candidate_headlines = get_headlines_for_agent(
-            {"openness": agent.openness, "conscientiousness": agent.conscientiousness,
-             "extraversion": agent.extraversion, "agreeableness": agent.agreeableness,
-             "neuroticism": agent.neuroticism},
-            n=3,
-        ) if news_enabled else []
+        candidate_headlines = get_headlines(n=3) if news_enabled else []
 
         agent_snap = {
             "openness": agent.openness, "conscientiousness": agent.conscientiousness,
@@ -572,12 +564,7 @@ def _agent_snapshot(agent, ghost_post=None, news_enabled=True, provider="mistral
             target = random.choice(feed)
             reply_to = {"id": target.id, "content": target.content}
         elif news_enabled and not reply_to and random.random() >= 0.4:
-            headlines = get_headlines_for_agent(
-                {"openness": agent.openness, "conscientiousness": agent.conscientiousness,
-                 "extraversion": agent.extraversion, "agreeableness": agent.agreeableness,
-                 "neuroticism": agent.neuroticism},
-                n=1,
-            )
+            headlines = get_headlines(n=1)
 
     # Observer post — arcade-only. Agent senses they're being watched.
     # Only fires when the agent is about to make a top-level post (no reply_to).
