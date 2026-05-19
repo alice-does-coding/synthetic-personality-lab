@@ -5,6 +5,10 @@ import { useAdmin } from "../AdminContext";
 
 const mono = { fontFamily: "var(--mono)" };
 
+// "mistral-large-latest" -> "mistral-large". Used for display only; the full
+// version is still what gets sent to the provider.
+const stripModelLatest = (model) => model?.replace(/-latest$/, "") ?? model;
+
 // ── Status ────────────────────────────────────────────────────────────────────
 const STATUS_STYLE = {
   seeding:   { color: "#f472b6",        label: "seeding…" },
@@ -54,7 +58,7 @@ const DELETE_MESSAGES = {
   failed:    { warning: "This run failed due to a data quality error.", action: "Delete" },
 };
 
-function DeleteDialog({ run, onConfirm, onCancel }) {
+function DeleteDialog({ run, onConfirm, onCancel, error }) {
   const msg = DELETE_MESSAGES[run.status] ?? DELETE_MESSAGES.stopped;
   return (
     <div onClick={onCancel} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -62,9 +66,14 @@ function DeleteDialog({ run, onConfirm, onCancel }) {
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-h)" }}>Delete run</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-h)" }}>{run.name}</div>
-          <div style={{ fontSize: 10, color: "#fb7185" }}>{msg.warning}</div>
+          <div style={{ fontSize: 10, color: "var(--rose)" }}>{msg.warning}</div>
           <div style={{ fontSize: 10, color: "var(--text-dim)" }}>All agents, posts, snapshots, and news data will be permanently deleted.</div>
         </div>
+        {error && (
+          <div style={{ fontSize: 10, color: "var(--rose)", padding: "6px 10px", border: "1px solid var(--rose)", background: "rgba(251, 113, 133, 0.08)" }}>
+            failed to delete — {error}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8 }}>
           <Btn onClick={onConfirm} color="#000" border="#fb7185" bg="#fb7185">{msg.action}</Btn>
           <Btn onClick={onCancel}>cancel</Btn>
@@ -424,10 +433,10 @@ function RunDetail({ run, isRunning, isAdmin, onStart, onStop, onDeleteRequest }
 
       {/* Config grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 16, padding: "16px 0", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
-        <FIELD label="model"   value={run.model?.replace(/-latest$/, "")} />
-        <FIELD label="news"    value={run.news_enabled ? "enabled" : "disabled"} color={run.news_enabled ? "#2dd4bf" : "#ff3ea5"} />
-        <FIELD label="mode"    value={run.batch_mode ? "batch" : "timed"} color={run.batch_mode ? "#c77dff" : null} />
-        <FIELD label="ipip"    value={run.ipip_grounded !== false ? "grounded" : "ungrounded"} color={run.ipip_grounded !== false ? "#2dd4bf" : "#fb923c"} />
+        <FIELD label="model"   value={stripModelLatest(run.model)} />
+        <FIELD label="news"    value={run.news_enabled ? "enabled" : "disabled"} color={run.news_enabled ? "var(--mint)" : "var(--pink)"} />
+        <FIELD label="mode"    value={run.batch_mode ? "batch" : "timed"} color={run.batch_mode ? "var(--purple)" : null} />
+        <FIELD label="ipip"    value={run.ipip_grounded !== false ? "grounded" : "ungrounded"} color={run.ipip_grounded !== false ? "var(--mint)" : "#fb923c"} />
         {run.post_framing      && <FIELD label="framing"    value={run.post_framing} />}
         {run.persona           && <FIELD label="persona"    value={run.persona} />}
         <FIELD label="seed distribution" value={run.seed_distribution} />
@@ -512,6 +521,7 @@ export default function Runs() {
   const { isAdmin } = useAdmin();
   const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleteError,   setDeleteError]   = useState(null);
 
   const selectedRun = runs.find(r => r.id === viewingRunId) ?? runs[runs.length - 1] ?? null;
 
@@ -520,14 +530,26 @@ export default function Runs() {
 
   const handleDelete = async () => {
     const run = confirmDelete;
-    setConfirmDelete(null);
-    try { await api.deleteRun(run.id); await refresh(); } catch (e) { alert(`Failed to delete: ${e.message}`); }
+    setDeleteError(null);
+    try {
+      await api.deleteRun(run.id);
+      setConfirmDelete(null);
+      await refresh();
+    } catch (e) {
+      // Keep the dialog open so the user can read the error and retry / cancel.
+      setDeleteError(e.message || String(e));
+    }
   };
 
   return (
     <>
       {confirmDelete && (
-        <DeleteDialog run={confirmDelete} onConfirm={handleDelete} onCancel={() => setConfirmDelete(null)} />
+        <DeleteDialog
+          run={confirmDelete}
+          onConfirm={handleDelete}
+          onCancel={() => { setConfirmDelete(null); setDeleteError(null); }}
+          error={deleteError}
+        />
       )}
       {creating && (
         <CreateRunModal onCreated={async () => { setCreating(false); await refresh(); }} onClose={() => setCreating(false)} />

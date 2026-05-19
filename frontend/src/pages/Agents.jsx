@@ -3,14 +3,8 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useSimulation } from "../SimulationContext";
 import Avatar from "../components/Avatar";
+import { TRAIT_COLORS } from "../constants/traitColors";
 
-const TRAIT_COLORS = {
-  openness:          "#8b5cf6",
-  conscientiousness: "#3b82f6",
-  extraversion:      "#f59e0b",
-  agreeableness:     "#22c55e",
-  neuroticism:       "#ef4444",
-};
 const SHORT = { openness: "O", conscientiousness: "C", extraversion: "E", agreeableness: "A", neuroticism: "N" };
 
 

@@ -8,14 +8,7 @@ import { api } from "../api";
 import PostCard from "../components/PostCard";
 import MarkdownText from "../components/MarkdownText";
 import Avatar from "../components/Avatar";
-
-const TRAIT_COLORS = {
-  openness:          "#8b5cf6",
-  conscientiousness: "#3b82f6",
-  extraversion:      "#f59e0b",
-  agreeableness:     "#22c55e",
-  neuroticism:       "#ef4444",
-};
+import { TRAIT_COLORS } from "../constants/traitColors";
 
 export default function AgentProfile() {
   const { id } = useParams();

@@ -42,7 +42,7 @@ function SimStatus() {
           display: "inline-block",
           width: 6, height: 6,
           marginLeft: 6,
-          background: isRunning ? "#2dd4bf" : "var(--text)",
+          background: isRunning ? "var(--mint)" : "var(--text)",
           animation: isRunning ? "pulse 2s ease-in-out infinite" : "none",
           verticalAlign: "middle",
         }} />
@@ -97,8 +97,8 @@ function Header({ dark, setDark, onAdminClick, isAdmin }) {
                 fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700,
                 textTransform: "uppercase", letterSpacing: "0.08em",
                 padding: "3px 10px", cursor: "pointer",
-                border: "1px solid #2dd4bf",
-                background: "var(--bg)", color: "#2dd4bf",
+                border: "1px solid var(--mint)",
+                background: "var(--bg)", color: "var(--mint)",
               }}
             >
               admin
@@ -178,7 +178,7 @@ function AdminModal({ onClose }) {
         {isAdmin ? (
           <>
             <div style={{ fontSize: 12, color: "var(--text)" }}>
-              <span style={{ color: "#2dd4bf", fontWeight: 700 }}>●</span> admin mode active
+              <span style={{ color: "var(--mint)", fontWeight: 700 }}>●</span> admin mode active
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -187,7 +187,7 @@ function AdminModal({ onClose }) {
                   fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
                   textTransform: "uppercase", letterSpacing: "0.08em",
                   padding: "5px 16px", cursor: "pointer",
-                  border: "1px solid #fb7185", background: "var(--bg)", color: "#fb7185",
+                  border: "1px solid var(--rose)", background: "var(--bg)", color: "var(--rose)",
                 }}
               >
                 lock
@@ -224,7 +224,7 @@ function AdminModal({ onClose }) {
                 padding: "7px 10px", outline: "none", width: "100%", boxSizing: "border-box",
               }}
             />
-            {error && <span style={{ fontSize: 10, color: "#fb7185" }}>{error}</span>}
+            {error && <span style={{ fontSize: 10, color: "var(--rose)" }}>{error}</span>}
             <div style={{ display: "flex", gap: 10 }}>
               <button
                 onClick={submit}

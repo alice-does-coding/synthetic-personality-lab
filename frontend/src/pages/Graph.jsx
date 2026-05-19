@@ -3,16 +3,9 @@ import { Link } from "react-router-dom";
 import ForceGraph2D from "react-force-graph-2d";
 import { api } from "../api";
 import { useRun } from "../RunContext";
+import { TRAITS, TRAIT_COLORS } from "../constants/traitColors";
 
-const TRAITS = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"];
-const SHORT  = { openness: "OPE", conscientiousness: "CON", extraversion: "EXT", agreeableness: "AGR", neuroticism: "NEU" };
-const TRAIT_COLORS = {
-  openness:          "#8b5cf6",
-  conscientiousness: "#3b82f6",
-  extraversion:      "#f59e0b",
-  agreeableness:     "#22c55e",
-  neuroticism:       "#ef4444",
-};
+const SHORT = { openness: "OPE", conscientiousness: "CON", extraversion: "EXT", agreeableness: "AGR", neuroticism: "NEU" };
 
 function lerpColor(a, b, t) {
   const hex = (s) => parseInt(s, 16);
