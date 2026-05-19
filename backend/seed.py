@@ -99,7 +99,7 @@ def _sample_score(mean, std):
 def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AGENT):
     """Seed agents for a specific run. Call from within an app context."""
     from models import Run
-    from personas import PERSONAS, GEN1_POKEMON
+    from personas import PERSONAS
 
     run = db.session.get(Run, run_id)
     persona = PERSONAS.get(run.persona) if run and run.persona else None
@@ -112,15 +112,18 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
     if run.random_seed is not None:
         random.seed(run.random_seed)
 
-    is_pokemon  = (run.persona == "pokemon")
-    custom_pool = run.name_pool if run.name_pool else None
+    # A run can override the name pool inline; otherwise we fall back to the
+    # persona's bundled name_pool (if any). Either case pins agent_count to
+    # the length of the chosen pool so we never wrap or truncate the list.
+    custom_pool  = run.name_pool if run.name_pool else None
+    persona_pool = persona.get("name_pool") if persona else None
 
-    if is_pokemon:
-        num_agents = len(GEN1_POKEMON)
-        name_list  = list(GEN1_POKEMON)
-    elif custom_pool:
+    if custom_pool:
         num_agents = len(custom_pool)
         name_list  = list(custom_pool)
+    elif persona_pool:
+        num_agents = len(persona_pool)
+        name_list  = list(persona_pool)
     else:
         name_list  = None
 
@@ -152,8 +155,9 @@ def seed_for_run(run_id, num_agents=NUM_AGENTS, follows_per_agent=FOLLOWS_PER_AG
             entry = name_list[i]
             cfg["name_override"] = entry
             cfg["handle_base"]   = re.sub(r"[^a-z0-9_]", "", entry.lower().replace(" ", "_").replace("-", "_"))[:30] or f"agent{i}"
-            if is_pokemon:
-                cfg["bio_framing"] = f"{entry}, an original Generation 1 Pokémon"
+            if persona and persona.get("bio_framing"):
+                # Persona-specific framing template — uses {name} as a placeholder.
+                cfg["bio_framing"] = persona["bio_framing"].format(name=entry)
             elif custom_pool:
                 # Named character pool — stay in character, ignore generic post_framing
                 cfg["bio_framing"] = (

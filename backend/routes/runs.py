@@ -38,7 +38,8 @@ def list_runs():
         ).group_by(Post.run_id).all()
     }
 
-    # Actual seeded agent count — may differ from agent_count (e.g. pokemon = 151)
+    # Actual seeded agent count — may differ from agent_count when the persona
+    # supplies a name_pool that pins the count to its length.
     actual_agent_counts = {
         row[0]: row[1]
         for row in db.session.query(Agent.run_id, db.func.count(Agent.id))
@@ -118,7 +119,8 @@ def create_run():
         def do_seed():
             with app.app_context():
                 from seed import seed_for_run
-                # pokemon persona overrides num_agents to 151 inside seed_for_run
+                # If the persona supplies a name_pool, seed_for_run pins
+                # num_agents to len(name_pool) regardless of `num`.
                 seed_for_run(run_id, num_agents=num)
 
         threading.Thread(target=do_seed, daemon=True).start()

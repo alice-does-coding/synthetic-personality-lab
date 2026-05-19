@@ -21,8 +21,9 @@ Drop a new JSON file in ``seed/personas/`` to add an archetype; remove one to
 drop it. The ``key`` field is the persona identifier used in API calls and the
 ``persona`` column on the ``runs`` table.
 
-``GEN1_POKEMON`` is exposed for backwards compatibility — it's the
-``name_pool`` of the ``pokemon`` persona.
+Personas with a ``name_pool`` (e.g. tarot decks, Pokédex lists) pin the
+seeded ``agent_count`` to the length of the pool so each name lands on
+exactly one agent.
 """
 
 import json
@@ -58,13 +59,10 @@ def _load_personas():
             "description": data.get("description", ""),
             "bio_prompt":  data.get("bio_prompt"),
             "priors":      priors,
-            "name_pool":   data.get("name_pool"),  # optional
+            "name_pool":   data.get("name_pool"),    # optional list[str]
+            "bio_framing": data.get("bio_framing"),  # optional str template (uses {name})
         }
     return personas
 
 
 PERSONAS = _load_personas()
-
-# Backwards-compatible export — the Gen-1 Pokemon name list used to live as
-# a module-level constant. Now sourced from the pokemon persona's name_pool.
-GEN1_POKEMON = (PERSONAS.get("pokemon", {}).get("name_pool") or [])
