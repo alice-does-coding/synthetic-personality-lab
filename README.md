@@ -284,4 +284,4 @@ The instrument became more interesting than the paper. The public simulation —
 
 ---
 
-Built by [Alice Ott](https://github.com/alice-does-coding). Apache 2.0 licensed.
+Built by [Alice Ott](https://github.com/alice-does-coding). Source-available under [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) — research, academic, and personal use welcome; commercial use by separate arrangement.
