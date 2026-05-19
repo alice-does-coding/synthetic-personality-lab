@@ -22,6 +22,20 @@ _MIGRATIONS = [
     "ALTER TABLE posts ADD COLUMN IF NOT EXISTS topics JSONB",
     # 2026-04-07 — decouple lifetime from tick count; use wall-clock expiry
     "ALTER TABLE agents ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP",
+    # 2026-05-18 — arcade → simulation rename.
+    # Copy is_arcade values into the new is_public column, then drop the old
+    # column and the unused arcade_agents table. Rename the public-run row.
+    """
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='runs' AND column_name='is_arcade') THEN
+        UPDATE runs SET is_public = is_arcade WHERE is_arcade IS TRUE;
+        ALTER TABLE runs DROP COLUMN is_arcade;
+      END IF;
+    END $$;
+    """,
+    "UPDATE runs SET name='__simulation__' WHERE name='__arcade__'",
+    "DROP TABLE IF EXISTS arcade_agents",
 ]
 
 

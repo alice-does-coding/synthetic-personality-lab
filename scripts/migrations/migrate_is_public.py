@@ -1,16 +1,18 @@
 """
 Migration: complete the arcade → simulation rename in the database.
 
-Two changes:
-  1. Rename runs.is_arcade → runs.is_public. The flag distinguishes the
-     permanent visitor-facing run from research runs, so `is_public` is more
-     descriptive than the older product-branded name.
-  2. Drop the empty `arcade_agents` table, left behind by the removed
-     `ArcadeAgent` model. The class was declared but never instantiated, so
-     any row count is zero in practice.
+Three changes, all idempotent:
+  1. Rename runs.is_arcade → runs.is_public. Handles three states:
+       - only is_arcade exists  → RENAME
+       - both exist             → copy values from is_arcade to is_public, drop is_arcade
+       - only is_public exists  → no-op
+  2. Rename the public-run row: name '__arcade__' → '__simulation__'.
+  3. Drop the empty `arcade_agents` table left behind by the removed
+     `ArcadeAgent` model.
 
-Idempotent — each step checks current schema state and is a no-op if already
-applied.
+The same logic also runs automatically inside backend/database.py on every
+app boot, so this script is mainly here for researchers who want to apply
+the schema fix without a full deploy.
 
   python migrate_is_public.py
 """
@@ -21,12 +23,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DB_URL = os.getenv("DATABASE_URL", "")
-
-CHECK_COLUMN_OLD = "SELECT 1 FROM information_schema.columns WHERE table_name='runs' AND column_name='is_arcade'"
-CHECK_COLUMN_NEW = "SELECT 1 FROM information_schema.columns WHERE table_name='runs' AND column_name='is_public'"
-CHECK_TABLE      = "SELECT 1 FROM information_schema.tables  WHERE table_name='arcade_agents'"
-RENAME_COLUMN    = "ALTER TABLE runs RENAME COLUMN is_arcade TO is_public"
-DROP_TABLE       = "DROP TABLE arcade_agents"
 
 
 def parse_url(url):
@@ -42,25 +38,49 @@ def parse_url(url):
     return dict(host=host, user=user, password=password, dbname=dbname, port=int(port))
 
 
-def _rename_is_arcade(cur):
-    cur.execute(CHECK_COLUMN_NEW)
-    if cur.fetchone():
-        print("is_public already exists — skipping column rename.")
-        return
-    cur.execute(CHECK_COLUMN_OLD)
-    if not cur.fetchone():
-        print("Neither is_arcade nor is_public found on runs — schema is unexpected. Aborting.")
-        raise RuntimeError("unexpected runs schema")
-    cur.execute(RENAME_COLUMN)
-    print("Renamed runs.is_arcade → runs.is_public.")
+def _has_column(cur, table, column):
+    cur.execute(
+        "SELECT 1 FROM information_schema.columns WHERE table_name=%s AND column_name=%s",
+        (table, column),
+    )
+    return cur.fetchone() is not None
+
+
+def _has_table(cur, table):
+    cur.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_name=%s",
+        (table,),
+    )
+    return cur.fetchone() is not None
+
+
+def _migrate_is_arcade(cur):
+    has_old = _has_column(cur, "runs", "is_arcade")
+    has_new = _has_column(cur, "runs", "is_public")
+    if has_old and not has_new:
+        cur.execute("ALTER TABLE runs RENAME COLUMN is_arcade TO is_public")
+        print("Renamed runs.is_arcade → runs.is_public.")
+    elif has_old and has_new:
+        cur.execute("UPDATE runs SET is_public = is_arcade WHERE is_arcade IS TRUE")
+        cur.execute("ALTER TABLE runs DROP COLUMN is_arcade")
+        print("Both columns existed — copied is_arcade values into is_public, dropped is_arcade.")
+    else:
+        print("is_arcade column already gone — skipping.")
+
+
+def _rename_run_row(cur):
+    cur.execute("UPDATE runs SET name='__simulation__' WHERE name='__arcade__'")
+    if cur.rowcount:
+        print(f"Renamed {cur.rowcount} run row(s): __arcade__ → __simulation__.")
+    else:
+        print("No __arcade__ run row to rename.")
 
 
 def _drop_arcade_agents(cur):
-    cur.execute(CHECK_TABLE)
-    if not cur.fetchone():
+    if not _has_table(cur, "arcade_agents"):
         print("arcade_agents table already gone — skipping drop.")
         return
-    cur.execute(DROP_TABLE)
+    cur.execute("DROP TABLE arcade_agents")
     print("Dropped arcade_agents table.")
 
 
@@ -73,7 +93,8 @@ def run():
     conn.autocommit = False
     cur = conn.cursor()
     try:
-        _rename_is_arcade(cur)
+        _migrate_is_arcade(cur)
+        _rename_run_row(cur)
         _drop_arcade_agents(cur)
         conn.commit()
         print("Migration complete.")
