@@ -2,6 +2,10 @@
 
 All simulation code calls these functions instead of touching provider
 SDKs directly. The provider and model are stored on the Run record.
+
+One run = one model. On auth failure the call raises LLMAuthError and
+the calling layer (engine, simulation_run) stops the run cleanly — no
+silent fallback to another provider, which would contaminate the data.
 """
 from providers.base import LLMAuthError, LLMRateLimitError  # re-export for callers
 
@@ -10,59 +14,49 @@ __all__ = ["chat", "chat_ipip", "extract_text", "generate_avatar", "reset_auth_l
 
 def reset_auth_latches(tick=None, retry_interval=12):
     """Reset per-tick stats. Auth latch is only cleared every retry_interval ticks
-    so a bad Mistral key doesn't waste a call on every single tick."""
+    so a bad provider key doesn't waste a call on every single tick."""
     from providers.mistral import reset_stats
-    from providers.hf import reset_auth
+    from providers.hf import reset_auth as reset_hf_auth
+    from providers.anthropic import reset_auth as reset_anthropic_auth
     clear_latch = (tick is None) or (tick % retry_interval == 0)
     reset_stats(clear_auth_latch=clear_latch)
-    reset_auth()
-
-
-def _hf_fallback(messages, max_tokens, temperature):
-    """Fall back to HF when the primary provider is unavailable."""
-    import logging
-    from config import Config
-    from providers.hf import chat as hf_chat
-    logging.getLogger(__name__).warning("primary provider unavailable — falling back to HF (%s)", Config.HF_CHAT_MODEL)
-    return hf_chat(messages, max_tokens, temperature, model=Config.HF_CHAT_MODEL)
+    reset_hf_auth()
+    reset_anthropic_auth()
 
 
 def chat(provider, model, messages, max_tokens, temperature):
-    """Route a chat call to the correct provider.
-
-    Falls back to HF automatically on auth failure so the simulation keeps running
-    even when the primary provider (Mistral) has a billing/key issue.
+    """Route a chat call to the correct provider. No fallback.
 
     Returns:
-        str for HF (plain string content).
+        str for HF and Anthropic (plain string content).
         Mistral response object for mistral (caller must use extract_text).
 
-    Raises LLMAuthError only if both primary and fallback fail.
+    Raises LLMAuthError on 401 — caller is expected to stop the run.
     """
     if provider == "hf":
         from providers.hf import chat as hf_chat
         return hf_chat(messages, max_tokens, temperature, model=model)
+    elif provider == "anthropic":
+        from providers.anthropic import chat as anthropic_chat
+        return anthropic_chat(messages, max_tokens, temperature, model=model)
     else:  # default: mistral
-        try:
-            from providers.mistral import make_client, chat as mistral_chat
-            client = make_client()
-            return mistral_chat(client, messages, max_tokens, temperature, model=model)
-        except LLMAuthError:
-            return _hf_fallback(messages, max_tokens, temperature)
+        from providers.mistral import make_client, chat as mistral_chat
+        client = make_client()
+        return mistral_chat(client, messages, max_tokens, temperature, model=model)
 
 
 def chat_ipip(provider, model, messages, max_tokens, temperature):
-    """IPIP variant — longer timeout for Mistral, same for HF."""
+    """IPIP variant — longer timeout for Mistral, same for HF/Anthropic. No fallback."""
     if provider == "hf":
         from providers.hf import chat as hf_chat
         return hf_chat(messages, max_tokens, temperature, model=model)
+    elif provider == "anthropic":
+        from providers.anthropic import chat as anthropic_chat
+        return anthropic_chat(messages, max_tokens, temperature, model=model)
     else:
-        try:
-            from providers.mistral import make_ipip_client, chat as mistral_chat
-            client = make_ipip_client()
-            return mistral_chat(client, messages, max_tokens, temperature, model=model)
-        except LLMAuthError:
-            return _hf_fallback(messages, max_tokens, temperature)
+        from providers.mistral import make_ipip_client, chat as mistral_chat
+        client = make_ipip_client()
+        return mistral_chat(client, messages, max_tokens, temperature, model=model)
 
 
 def generate_avatar(provider, bio, name=None):
@@ -75,9 +69,9 @@ def generate_avatar(provider, bio, name=None):
 def extract_text(provider, content):
     """Extract a plain string from provider response content.
 
-    HF returns plain strings already. Mistral returns str | list[TextChunk].
+    HF and Anthropic return plain strings already. Mistral returns str | list[TextChunk].
     """
-    if provider == "hf":
+    if provider in ("hf", "anthropic"):
         return content if isinstance(content, str) else ""
     else:
         from providers.mistral import extract_text as mistral_extract

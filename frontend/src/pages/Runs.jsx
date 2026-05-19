@@ -110,8 +110,9 @@ const Textarea = ({ label, value, onChange, placeholder, rows = 3 }) => (
 );
 
 const PROVIDERS = [
-  { value: "mistral", label: "Mistral" },
-  { value: "hf",      label: "HuggingFace" },
+  { value: "mistral",   label: "Mistral"     },
+  { value: "hf",        label: "HuggingFace" },
+  { value: "anthropic", label: "Anthropic"   },
 ];
 
 const PROVIDER_MODELS = {
@@ -128,6 +129,12 @@ const PROVIDER_MODELS = {
     { value: "deepseek-ai/DeepSeek-V3-0324",        label: "DeepSeek V3"        },
     { value: "deepseek-ai/DeepSeek-R1",             label: "DeepSeek R1"        },
   ],
+  anthropic: [
+    { value: "claude-opus-4-7",            label: "Claude Opus 4.7"   },
+    { value: "claude-sonnet-4-6",          label: "Claude Sonnet 4.6" },
+    { value: "claude-haiku-4-5-20251001",  label: "Claude Haiku 4.5"  },
+    { value: "claude-3-7-sonnet-20250219", label: "Claude Sonnet 3.7" },
+  ],
 };
 
 function shortModelLabel(model) {
@@ -140,6 +147,14 @@ function shortModelLabel(model) {
       .replace(/[.-]/g, "")
       .toLowerCase()
       .slice(0, 12);
+  }
+  // Anthropic: "claude-opus-4-7" → "opus47", "claude-haiku-4-5-20251001" → "haiku45"
+  if (model.startsWith("claude-")) {
+    return model
+      .replace(/^claude-/, "")
+      .replace(/-\d{8}$/, "")
+      .replace(/^(\d+-)?(opus|sonnet|haiku)-(\d+)-(\d+)$/, "$2$3$4")
+      .replace(/-/g, "");
   }
   return model
     .replace(/-latest$/, "")

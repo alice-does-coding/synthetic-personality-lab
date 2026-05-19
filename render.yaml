@@ -14,6 +14,8 @@ services:
         value: 30
       - key: HF_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: ADMIN_KEY
         sync: false
       - key: CORS_ORIGINS

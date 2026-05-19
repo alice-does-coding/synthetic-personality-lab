@@ -37,8 +37,10 @@ class Config:
     HF_API_KEY = os.getenv("HF_API_KEY")
     # HF Pro serverless rate limit (req/sec) — conservative default for Pro tier
     HF_RATE_LIMIT = float(os.getenv("HF_RATE_LIMIT", 8.0))
-    # Fallback chat model used when primary provider (Mistral) is unavailable
-    HF_CHAT_MODEL = os.getenv("HF_CHAT_MODEL", "Qwen/Qwen2.5-72B-Instruct")
+    # Anthropic API key — enables Claude models as a run provider
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    # Anthropic rate limit (req/sec) — conservative default; raise for higher tiers
+    ANTHROPIC_RATE_LIMIT = float(os.getenv("ANTHROPIC_RATE_LIMIT", 4.0))
     # Thoughts generated per top-level post tick — 1 published, rest become inner monologue
     N_THOUGHTS = int(os.getenv("N_THOUGHTS", 3))
     # Max tokens per post/reply — 140 chars ≈ 40 tokens, use 200 for safe headroom
