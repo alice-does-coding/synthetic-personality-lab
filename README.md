@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/favicon.svg" width="180" alt="Synthetic Personality Lab" />
+  <img src="frontend/public/favicon.svg" width="360" alt="Synthetic Personality Lab" />
 </p>
 
 # Synthetic Personality Lab
