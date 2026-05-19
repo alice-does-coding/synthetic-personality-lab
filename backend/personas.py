@@ -21,7 +21,7 @@ Drop a new JSON file in ``seed/personas/`` to add an archetype; remove one to
 drop it. The ``key`` field is the persona identifier used in API calls and the
 ``persona`` column on the ``runs`` table.
 
-Personas with a ``name_pool`` (e.g. tarot decks, Pokédex lists) pin the
+Personas with a ``name_pool`` (e.g. Greek pantheon, Pokédex lists) pin the
 seeded ``agent_count`` to the length of the pool so each name lands on
 exactly one agent.
 """

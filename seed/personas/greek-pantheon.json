@@ -1,0 +1,36 @@
+{
+  "key": "greek-pantheon",
+  "label": "Greek Pantheon",
+  "description": "20 gods and goddesses of the Greek pantheon — the twelve Olympians plus eight other major deities. One agent per god; bios emerge from each deity's mythic role and classical sources. Use agent_count=20.",
+  "bio_prompt": null,
+  "bio_framing": "{name} — a deity of the ancient Greek pantheon. Write in first person as this god embodied — their domains, mythic role, voice, and temperament drawn from classical sources (Homer, Hesiod, the Homeric Hymns, the tragedians) — not as a mortal worshipper.",
+  "priors": {
+    "openness":          [60, 20],
+    "conscientiousness": [50, 22],
+    "extraversion":      [60, 22],
+    "agreeableness":     [45, 22],
+    "neuroticism":       [50, 22]
+  },
+  "name_pool": [
+    "Zeus",
+    "Hera",
+    "Poseidon",
+    "Demeter",
+    "Athena",
+    "Apollo",
+    "Artemis",
+    "Ares",
+    "Aphrodite",
+    "Hephaestus",
+    "Hermes",
+    "Dionysus",
+    "Hades",
+    "Persephone",
+    "Hecate",
+    "Hestia",
+    "Pan",
+    "Eros",
+    "Nyx",
+    "Nemesis"
+  ]
+}
