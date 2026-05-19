@@ -128,18 +128,28 @@ function AdminModal({ onClose }) {
   const { isAdmin, unlock, lock } = useAdmin();
   const [key, setKey] = useState("");
   const [error, setError] = useState(null);
+  const [verifying, setVerifying] = useState(false);
 
   const submit = async () => {
-    if (!key.trim()) return;
-    // Smoke-test the key before storing
+    const candidate = key.trim();
+    if (!candidate || verifying) return;
+    setError(null);
+    setVerifying(true);
     try {
-      await api.simStatus(); // public endpoint just to confirm network is up
-      unlock(key.trim());
+      // Verify against an admin-protected endpoint before storing.
+      // Any string used to unlock the UI but admin calls would then 401 silently.
+      await api.adminCheck(candidate);
+      unlock(candidate);
       onClose();
-    } catch {
-      setError("could not verify — key stored anyway");
-      unlock(key.trim());
-      onClose();
+    } catch (err) {
+      const msg = String(err && err.message || "");
+      if (msg.includes("401")) {
+        setError("invalid key");
+      } else {
+        setError("could not reach the server");
+      }
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -218,16 +228,16 @@ function AdminModal({ onClose }) {
             <div style={{ display: "flex", gap: 10 }}>
               <button
                 onClick={submit}
-                disabled={!key.trim()}
+                disabled={!key.trim() || verifying}
                 style={{
                   fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
                   textTransform: "uppercase", letterSpacing: "0.08em",
                   padding: "5px 16px", cursor: "pointer",
                   border: "1px solid var(--text-h)", background: "var(--text-h)", color: "var(--bg)",
-                  opacity: !key.trim() ? 0.4 : 1,
+                  opacity: (!key.trim() || verifying) ? 0.4 : 1,
                 }}
               >
-                unlock
+                {verifying ? "verifying…" : "unlock"}
               </button>
               <button
                 onClick={onClose}

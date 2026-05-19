@@ -17,6 +17,14 @@ def status():
     })
 
 
+@sim_bp.route("/admin-check", methods=["GET"])
+@require_admin
+def admin_check():
+    """Lightweight endpoint used by the frontend to verify an admin key
+    before unlocking. Returns 200 if the X-Admin-Key header matches, else 401."""
+    return jsonify({"ok": True})
+
+
 @sim_bp.route("/tick", methods=["POST"])
 @require_admin
 def manual_tick():

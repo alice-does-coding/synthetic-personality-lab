@@ -25,6 +25,15 @@ export const api = {
   simTick:    (runId)         => adminReq("/sim/tick",   { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId }) }),
   simAssess:  (runId)         => adminReq("/sim/assess", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId }) }),
 
+  // Validate a candidate admin key BEFORE storing it. Hits an admin-protected
+  // endpoint with the candidate key in the header; resolves on 200, throws on 401.
+  adminCheck: (candidateKey) =>
+    fetch(`${BASE}/sim/admin-check`, { headers: { "X-Admin-Key": candidateKey } })
+      .then(res => {
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        return res.json();
+      }),
+
   // agents
   listAgents:         (runId)     => req(`/agents/${runId ? `?run_id=${runId}` : ""}`),
   getAgent:           (id)        => req(`/agents/${id}`),
