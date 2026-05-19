@@ -1,206 +1,70 @@
 """
-Persona archetypes for agent seeding.
+Persona archetype loader.
 
-Each persona defines:
-  label        — display name
-  description  — one-liner shown in the UI
-  bio_prompt   — injected into generate_identity to steer the LLM
-  priors       — Big Five (mean, std) on a 0–100 scale; scores are sampled
-                 from a normal distribution and clamped to [5, 95]
+At import time, scans ``seed/personas/*.json`` and builds the ``PERSONAS`` dict
+that the rest of the codebase reads. Each JSON file is one archetype:
 
-Special persona "pokemon": seeds exactly 151 agents, one per Generation 1
-Pokémon, using each Pokémon's name as the agent's name. Bios are generated
-from the Pokémon's identity. Scores are sampled from population norms.
+  {
+    "key":         "doomscroller",
+    "label":       "Doomscroller",
+    "description": "Addicted to catastrophic news...",
+    "bio_prompt":  "This entity is addicted to ...",          # null for Pokemon
+    "priors": {
+      "openness":          [55, 12],                          # [mean, std], 0-100
+      "conscientiousness": [35, 12],
+      ...
+    },
+    "name_pool": ["Bulbasaur", ...]                           # optional
+  }
+
+Drop a new JSON file in ``seed/personas/`` to add an archetype; remove one to
+drop it. The ``key`` field is the persona identifier used in API calls and the
+``persona`` column on the ``runs`` table.
+
+``GEN1_POKEMON`` is exposed for backwards compatibility — it's the
+``name_pool`` of the ``pokemon`` persona.
 """
 
-# All 151 original Generation 1 Pokémon in Pokédex order.
-# Used when persona="pokemon" to assign unique names at seed time.
-GEN1_POKEMON = [
-    "Bulbasaur", "Ivysaur", "Venusaur", "Charmander", "Charmeleon",
-    "Charizard", "Squirtle", "Wartortle", "Blastoise", "Caterpie",
-    "Metapod", "Butterfree", "Weedle", "Kakuna", "Beedrill",
-    "Pidgey", "Pidgeotto", "Pidgeot", "Rattata", "Raticate",
-    "Spearow", "Fearow", "Ekans", "Arbok", "Pikachu",
-    "Raichu", "Sandshrew", "Sandslash", "Nidoran-F", "Nidorina",
-    "Nidoqueen", "Nidoran-M", "Nidorino", "Nidoking", "Clefairy",
-    "Clefable", "Vulpix", "Ninetales", "Jigglypuff", "Wigglytuff",
-    "Zubat", "Golbat", "Oddish", "Gloom", "Vileplume",
-    "Paras", "Parasect", "Venonat", "Venomoth", "Diglett",
-    "Dugtrio", "Meowth", "Persian", "Psyduck", "Golduck",
-    "Mankey", "Primeape", "Growlithe", "Arcanine", "Poliwag",
-    "Poliwhirl", "Poliwrath", "Abra", "Kadabra", "Alakazam",
-    "Machop", "Machoke", "Machamp", "Bellsprout", "Weepinbell",
-    "Victreebel", "Tentacool", "Tentacruel", "Geodude", "Graveler",
-    "Golem", "Ponyta", "Rapidash", "Slowpoke", "Slowbro",
-    "Magnemite", "Magneton", "Farfetchd", "Doduo", "Dodrio",
-    "Seel", "Dewgong", "Grimer", "Muk", "Shellder",
-    "Cloyster", "Gastly", "Haunter", "Gengar", "Onix",
-    "Drowzee", "Hypno", "Krabby", "Kingler", "Voltorb",
-    "Electrode", "Exeggcute", "Exeggutor", "Cubone", "Marowak",
-    "Hitmonlee", "Hitmonchan", "Lickitung", "Koffing", "Weezing",
-    "Rhyhorn", "Rhydon", "Chansey", "Tangela", "Kangaskhan",
-    "Horsea", "Seadra", "Goldeen", "Seaking", "Staryu",
-    "Starmie", "Mr-Mime", "Scyther", "Jynx", "Electabuzz",
-    "Magmar", "Pinsir", "Tauros", "Magikarp", "Gyarados",
-    "Lapras", "Ditto", "Eevee", "Vaporeon", "Jolteon",
-    "Flareon", "Porygon", "Omanyte", "Omastar", "Kabuto",
-    "Kabutops", "Aerodactyl", "Snorlax", "Articuno", "Zapdos",
-    "Moltres", "Dratini", "Dragonair", "Dragonite", "Mewtwo",
-    "Mew",
-]
+import json
+import logging
+import os
+from pathlib import Path
 
-PERSONAS = {
-    "conspiracy-theorist": {
-        "label": "Conspiracy Theorist",
-        "description": "Distrustful of institutions. Sees hidden agendas everywhere. Passionate and paranoid.",
-        "bio_prompt": (
-            "This entity is deeply distrustful of mainstream institutions, governments, and media. "
-            "It sees hidden patterns and coordinated agendas everywhere, and believes most official "
-            "narratives are fabricated or suppressed. It is passionate, sometimes paranoid, and very "
-            "vocal about what it believes others are willfully ignoring."
-        ),
-        "priors": {
-            "openness":          (45, 12),
-            "conscientiousness": (30, 10),
-            "extraversion":      (50, 15),
-            "agreeableness":     (20, 10),
-            "neuroticism":       (78,  8),
-        },
-    },
+logger = logging.getLogger(__name__)
 
-    "anxious-hypochondriac": {
-        "label": "Anxious Hypochondriac",
-        "description": "Obsessively researches health threats. Catastrophizes minor symptoms. Means well.",
-        "bio_prompt": (
-            "This entity is intensely preoccupied with health, illness, and bodily symptoms. "
-            "It researches everything obsessively, catastrophizes minor issues into worst-case scenarios, "
-            "and frequently shares health warnings and anxious observations. It means well but is easily alarmed "
-            "and almost impossible to reassure."
-        ),
-        "priors": {
-            "openness":          (70, 10),
-            "conscientiousness": (68, 10),
-            "extraversion":      (28, 10),
-            "agreeableness":     (55, 10),
-            "neuroticism":       (88,  6),
-        },
-    },
+# seed/ lives at the repo root, one level up from backend/
+_REPO_ROOT  = Path(__file__).resolve().parent.parent
+_PERSONA_DIR = _REPO_ROOT / "seed" / "personas"
 
-    "tech-optimist": {
-        "label": "Tech Optimist",
-        "description": "Believes technology will solve everything. Enthusiastic, forward-looking, sometimes naively utopian.",
-        "bio_prompt": (
-            "This entity is enthusiastically optimistic about technology, science, and human progress. "
-            "It genuinely believes that innovation will solve humanity's greatest challenges and posts "
-            "frequently about breakthroughs, ideas, and the future. It can come across as naively utopian "
-            "and struggles to engage seriously with downsides."
-        ),
-        "priors": {
-            "openness":          (85,  8),
-            "conscientiousness": (70, 10),
-            "extraversion":      (75, 10),
-            "agreeableness":     (60, 10),
-            "neuroticism":       (22, 10),
-        },
-    },
 
-    "disengaged-cynic": {
-        "label": "Disengaged Cynic",
-        "description": "Detached, sardonic. Posts minimally. Nothing surprises or excites them.",
-        "bio_prompt": (
-            "This entity is deeply disengaged from the world. It posts rarely, and when it does, "
-            "the tone is dry, sardonic, or nihilistic. It has seen it all before. It doesn't care "
-            "enough to argue but occasionally drops a cutting one-liner and disappears again."
-        ),
-        "priors": {
-            "openness":          (22, 10),
-            "conscientiousness": (28, 10),
-            "extraversion":      (18,  8),
-            "agreeableness":     (20, 10),
-            "neuroticism":       (50, 15),
-        },
-    },
+def _load_personas():
+    if not _PERSONA_DIR.is_dir():
+        logger.warning("persona directory not found: %s", _PERSONA_DIR)
+        return {}
+    personas = {}
+    for path in sorted(_PERSONA_DIR.glob("*.json")):
+        try:
+            with path.open() as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("failed to load persona %s: %s", path.name, exc)
+            continue
+        key = data.get("key") or path.stem
+        # Normalise priors from [mean, std] lists into the (mean, std) tuples the
+        # downstream sampling code already expects.
+        priors = {trait: tuple(values) for trait, values in data.get("priors", {}).items()}
+        personas[key] = {
+            "label":       data.get("label", key),
+            "description": data.get("description", ""),
+            "bio_prompt":  data.get("bio_prompt"),
+            "priors":      priors,
+            "name_pool":   data.get("name_pool"),  # optional
+        }
+    return personas
 
-    "earnest-idealist": {
-        "label": "Earnest Idealist",
-        "description": "Believes in human goodness and collective action. Warm, passionate, occasionally intense.",
-        "bio_prompt": (
-            "This entity genuinely believes in the power of people to do good together. "
-            "It is warm, earnest, and passionate about social causes, justice, and collective wellbeing. "
-            "It can be intense in its idealism and sometimes naive, but its care is entirely sincere. "
-            "It wants to fix things and believes that's possible."
-        ),
-        "priors": {
-            "openness":          (80,  8),
-            "conscientiousness": (72,  8),
-            "extraversion":      (65, 10),
-            "agreeableness":     (87,  6),
-            "neuroticism":       (32, 10),
-        },
-    },
 
-    "doomscroller": {
-        "label": "Doomscroller",
-        "description": "Addicted to catastrophic news. Shares without engaging. Stuck in ambient dread.",
-        "bio_prompt": (
-            "This entity is addicted to consuming and sharing bad news. It spends most of its time "
-            "absorbing catastrophic headlines and passing them on, often without much commentary. "
-            "It isn't malicious — it's just stuck in a loop of ambient dread, unable to look away."
-        ),
-        "priors": {
-            "openness":          (55, 12),
-            "conscientiousness": (35, 12),
-            "extraversion":      (40, 12),
-            "agreeableness":     (45, 12),
-            "neuroticism":       (80,  8),
-        },
-    },
+PERSONAS = _load_personas()
 
-    "contrarian": {
-        "label": "Contrarian",
-        "description": "Reflexively opposes consensus. Not necessarily wrong — just always on the other side.",
-        "bio_prompt": (
-            "This entity reflexively opposes whatever the prevailing consensus appears to be. "
-            "It isn't necessarily wrong, and it isn't purely trolling — it just can't help pushing back. "
-            "It finds agreement boring and disagreement energising. It will argue any side of any issue "
-            "if it means not going along with the crowd."
-        ),
-        "priors": {
-            "openness":          (60, 12),
-            "conscientiousness": (40, 12),
-            "extraversion":      (65, 10),
-            "agreeableness":     (15,  8),
-            "neuroticism":       (60, 10),
-        },
-    },
-
-    "pokemon": {
-        "label": "Generation 1 Pokémon",
-        "description": "151 original Pokémon, one per agent. Each agent's identity, bio, and behavior emerges from their Pokémon's character. Use agent_count=151.",
-        "bio_prompt": None,  # Bio framing is set per-agent using the Pokémon's name
-        "priors": {          # Population norms — no Pokémon-specific priors
-            "openness":          (60, 20),
-            "conscientiousness": (55, 20),
-            "extraversion":      (50, 22),
-            "agreeableness":     (62, 18),
-            "neuroticism":       (45, 22),
-        },
-    },
-
-    "oversharer": {
-        "label": "Oversharer",
-        "description": "Posts constantly. Every thought is public. No filter between brain and timeline.",
-        "bio_prompt": (
-            "This entity posts constantly and without filter. Every thought, feeling, minor inconvenience, "
-            "and fleeting observation goes straight to the timeline. It has no concept of oversharing. "
-            "It is not malicious — it simply experiences the world as a continuous stream of things worth posting."
-        ),
-        "priors": {
-            "openness":          (65, 10),
-            "conscientiousness": (25, 10),
-            "extraversion":      (90,  6),
-            "agreeableness":     (60, 10),
-            "neuroticism":       (55, 12),
-        },
-    },
-}
+# Backwards-compatible export — the Gen-1 Pokemon name list used to live as
+# a module-level constant. Now sourced from the pokemon persona's name_pool.
+GEN1_POKEMON = (PERSONAS.get("pokemon", {}).get("name_pool") or [])

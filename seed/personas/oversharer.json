@@ -1,0 +1,13 @@
+{
+  "key": "oversharer",
+  "label": "Oversharer",
+  "description": "Posts constantly. Every thought is public. No filter between brain and timeline.",
+  "bio_prompt": "This entity posts constantly and without filter. Every thought, feeling, minor inconvenience, and fleeting observation goes straight to the timeline. It has no concept of oversharing. It is not malicious — it simply experiences the world as a continuous stream of things worth posting.",
+  "priors": {
+    "openness":          [65, 10],
+    "conscientiousness": [25, 10],
+    "extraversion":      [90,  6],
+    "agreeableness":     [60, 10],
+    "neuroticism":       [55, 12]
+  }
+}

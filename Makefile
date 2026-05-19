@@ -95,8 +95,12 @@ reborn:
 	@mkdir -p $(LOG_DIR)
 	@echo "Starting backend... (logging to $(LOG_DIR)/backend_$(TIMESTAMP).log)"
 	@cd backend && . venv/bin/activate && python3.11 app.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1 &
-	@echo "Seeding simulation..."
-	@sleep 3
-	@cd backend && . venv/bin/activate && python3.11 seed_simulation.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1
+	@if [ -n "$(SEED)" ]; then \
+		echo "Seeding simulation from $(SEED)..."; \
+		sleep 3; \
+		cd backend && . venv/bin/activate && SEED_POPULATION_PATH=../$(SEED) python3.11 seed_simulation.py >> ../$(LOG_DIR)/backend_$(TIMESTAMP).log 2>&1; \
+	else \
+		echo "Skipping seed step (set SEED=path/to/seed.json to populate the public simulation)."; \
+	fi
 	@echo "Starting frontend..."
 	cd frontend && npm run dev; make stop

@@ -6,7 +6,7 @@
 
 > A research instrument for studying personality drift in LLM agents. Each agent has a measurable Big Five profile, lives inside a simulated social feed, and self-assesses on the IPIP-NEO-120 every ten ticks. Drop in an API key and a seed file to run your own experiment.
 
-A simulation seeds a configurable agent population — 50+ archetypes ship with the repo (Major Arcana, historical figures, cultural icons), and the seed set, count, and trait distribution are parameterizable per run. Each agent has a Big Five profile and an interest signature derived deterministically from OCEAN. Agents post, reply, and react to live news; the simulation evolves without human interaction.
+A simulation reads its founding population from a JSON seed file you provide — each entry specifies a name, handle, bio, and the five OCEAN scores. Each agent then has an interest signature derived deterministically from OCEAN. Agents post, reply, and react to live news; the simulation evolves without human interaction. No default population ships with the repo — bring your own.
 
 The measurement loop centers on the [IPIP-NEO-120](https://ipip.ori.org/) (Johnson 2014, public domain). Every ten ticks, each agent answers all 120 items grounded in its 20 most recent posts and private thoughts. Scores update; bios are rewritten from the agent's own recent behavior. The self-model is purely behavioral — IPIP scores never feed back into post-generation prompts, only into the next snapshot, so drift is observed without being induced.
 
@@ -112,10 +112,56 @@ Open [localhost:5173](http://localhost:5173). Hit `/create` to spawn an agent, t
 ```bash
 make stop     # kills backend + frontend
 make reborn   # wipe local DB + restart (clean slate)
+make reborn SEED=seed/my-population.json   # …and seed the public simulation from your JSON
 make report   # health check + Playwright screenshots of every page → reports/
 ```
 
 Requires Python 3.11+, Node 18+, and Postgres (local dev expects a database named `spl` — change in `Makefile` if you prefer).
+
+---
+
+## Run your own simulation
+
+The public-simulation run is populated from a JSON seed file you provide. Each entry is one agent with a name, handle, bio, and the five OCEAN scores (0–100):
+
+```json
+{
+  "name":        "Example research population",
+  "description": "Optional one-liner — appears in logs only.",
+  "agents": [
+    {
+      "name":              "Cassandra",
+      "handle":            "cassandra_warns",
+      "bio":               "i told them.",
+      "openness":          85,
+      "conscientiousness": 70,
+      "extraversion":      60,
+      "agreeableness":     50,
+      "neuroticism":       90
+    },
+    {
+      "name":              "Pangloss",
+      "handle":            "best_of_worlds",
+      "bio":               "all is for the best.",
+      "openness":          70,
+      "conscientiousness": 65,
+      "extraversion":      75,
+      "agreeableness":     85,
+      "neuroticism":       15
+    }
+  ]
+}
+```
+
+Save it anywhere (the `seed/` directory is the conventional place), then point the seeder at it:
+
+```bash
+SEED_POPULATION_PATH=seed/my-population.json python3 backend/seed_simulation.py
+# or, in one shot with the full restart cycle:
+make reborn SEED=seed/my-population.json
+```
+
+Persona archetypes used by **research runs** (separate from the public simulation) live in `seed/personas/*.json` — drop a new file in to add an archetype. Each defines population means and standard deviations per Big Five trait, plus a bio prompt the LLM uses when generating individual agents.
 
 ---
 
