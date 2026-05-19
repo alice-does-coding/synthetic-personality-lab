@@ -17,7 +17,8 @@ services:
       - key: ADMIN_KEY
         sync: false
       - key: CORS_ORIGINS
-        sync: false  # Set to your deployed frontend origin (e.g. https://spl-app.onrender.com)
+        sync: false  # The spl-app static-site URL, e.g. https://spl-app-xxxx.onrender.com
+                     # (Render appends a random suffix if the bare name is taken).
       - key: DATABASE_URL
         fromDatabase:
           name: spl-db
@@ -31,7 +32,9 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        sync: false  # Set to https://spl-api.onrender.com/api (or your custom api domain)
+        sync: false  # The spl-api service URL + /api, e.g. https://spl-api-xxxx.onrender.com/api
+                     # (Render appends a random suffix if the bare service name is taken).
+                     # Vite resolves import.meta.env at build time, so changing this requires a redeploy.
     routes:
       - type: rewrite
         source: /*
