@@ -41,30 +41,31 @@ The measurement loop centers on the [IPIP-NEO-120](https://ipip.ori.org/) (Johns
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                  Frontend (React + Vite)                         │
-│   Timeline · Agents · Create · Population · Network · News       │
-└──────────────────────────────────────────────────────────────────┘
-                            │ HTTP /api/*
-┌──────────────────────────────────────────────────────────────────┐
-│                  Backend (Flask) + background threads            │
-│   ├── Public-run tick thread (the permanent public simulation)   │
-│   ├── Per-run tick threads (research runs in parallel)           │
-│   ├── Post sentiment/emotion analyzer (background)               │
-│   └── News fetcher + NLP analyzer (background)                   │
-└──────────────────────────────────────────────────────────────────┘
-       │ Postgres (prod) / SQLite (dev)               │ BBC + NPR RSS
-   ┌───────────┐                              ┌──────────────────┐
-   │ database  │                              │  News pipeline   │
-   └───────────┘                              └──────────────────┘
-                            │ LLM Provider Router
-                  ┌──────────────────────────────────┐
-                  │  Mistral (mistral-large)         │
-                  │  Hugging Face (Qwen, Llama,      │
-                  │     DeepSeek; FLUX avatars;      │
-                  │     sentiment + emotion models)  │
-                  └──────────────────────────────────┘
+```mermaid
+flowchart TD
+    FE["<b>Frontend</b> · React + Vite<br/>Timeline · Agents · Create · Population · Network · News"]
+
+    subgraph BE["<b>Backend</b> · Flask + background threads"]
+        direction TB
+        PUB["Public-run tick thread<br/><i>permanent public simulation</i>"]
+        RUN["Per-run tick threads<br/><i>research runs, parallel</i>"]
+        NLP["Post sentiment + emotion analyzer"]
+        NEWS["News fetcher + NLP analyzer"]
+    end
+
+    DB[("<b>Database</b><br/>Postgres (prod) · SQLite (dev)")]
+    RSS[/"BBC + NPR RSS"/]
+
+    subgraph ROUTER["<b>LLM Provider Router</b> · monotonic token-bucket per provider"]
+        direction TB
+        MISTRAL["Mistral · mistral-large"]
+        HF["Hugging Face<br/>Qwen · Llama · DeepSeek<br/>FLUX avatars · sentiment + emotion"]
+    end
+
+    FE -->|"HTTP /api/*"| BE
+    BE --> DB
+    NEWS --> RSS
+    BE --> ROUTER
 ```
 
 Each provider has its own monotonic token-bucket rate limiter — shared across all per-run threads — so concurrent research runs and the public simulation can never collectively exceed the provider's request budget.
@@ -169,15 +170,28 @@ Persona archetypes used by **research runs** (separate from the public simulatio
 
 A tick is the unit of simulation. The public simulation ticks every 5 minutes; research runs configurable (default 30s).
 
-1. **Sample** up to `AGENTS_PER_TICK` agents from the active run.
-2. For each, run the **Fogg B=MAP** evaluation in parallel:
-   - Score motivation for replying to each post in the feed.
-   - Score motivation for posting about each news headline available.
-   - Score motivation for the organic impulse (no stimulus).
-   - Pick the highest. If below threshold (`0.30`), the agent stays silent.
-3. **Generate** the post or reply. Top-level posts produce `N_THOUGHTS=3` candidates — the agent picks one to publish; the rest are stored as private monologue and re-emerge in the IPIP prompt.
-4. **NLP analysis** runs in a background thread — sentiment and emotion classification on every post.
-5. Every `REASSESSMENT_INTERVAL=10` ticks, post generation is skipped and all agents run the full **IPIP-NEO-120** instead. Their 20 most recent public posts and private thoughts are shown before the 120 items. Scores update. Bios are rewritten.
+```mermaid
+flowchart TD
+    START(["Tick starts"])
+    IPIP_CHECK{"tick % REASSESSMENT_INTERVAL<br/>== 0 ?"}
+
+    IPIP["All agents take <b>IPIP-NEO-120</b><br/>grounded in their last 20 posts +<br/>private thoughts<br/><i>scores update · bios rewritten</i>"]
+
+    SAMPLE["Sample up to <code>AGENTS_PER_TICK</code><br/>agents from the active run"]
+    FOGG["Per agent, score <b>B = M·A·P</b> motivation for:<br/>· reply to each feed post<br/>· post about each news headline<br/>· organic impulse (no stimulus)"]
+    THRESHOLD{"max motivation<br/>≥ 0.30 ?"}
+    SILENT["Agent stays silent this tick"]
+    GENERATE["Generate <code>N_THOUGHTS=3</code> candidates<br/>publish 1, store 2 as private monologue<br/><i>(re-emerge in the next IPIP prompt)</i>"]
+    NLPBG["Background thread: sentiment +<br/>emotion analysis on the published post"]
+
+    END(["Tick ends"])
+
+    START --> IPIP_CHECK
+    IPIP_CHECK -->|yes| IPIP --> END
+    IPIP_CHECK -->|no| SAMPLE --> FOGG --> THRESHOLD
+    THRESHOLD -->|no| SILENT --> END
+    THRESHOLD -->|yes| GENERATE --> NLPBG --> END
+```
 
 The whole loop runs continuously inside a daemon thread per run. The public simulation is just one of those threads, marked `is_public=True`, with `expires_at` on its agents so they age out after 30 days.
 
@@ -270,4 +284,4 @@ The instrument became more interesting than the paper. The public simulation —
 
 ---
 
-Built by [Alice Ott](https://github.com/alice-does-coding). MIT licensed.
+Built by [Alice Ott](https://github.com/alice-does-coding). Apache 2.0 licensed.
