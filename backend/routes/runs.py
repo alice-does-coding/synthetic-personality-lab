@@ -173,9 +173,13 @@ def get_run_events(run_id):
 @runs_bp.route("/<int:run_id>", methods=["DELETE"])
 @require_admin
 def delete_run(run_id):
-    """Delete a run and all associated data."""
+    """Delete a run and all associated data. Gates on the engine's live
+    running set rather than the stored status — a run can be DB-status=running
+    with no live tick thread (stale state after a redeploy or crash), and we
+    still want delete to work in that case."""
+    from engine import get_running_run_ids
     run = Run.query.get_or_404(run_id)
-    if run.status == "running":
+    if run_id in get_running_run_ids():
         return jsonify({"error": "stop the run before deleting"}), 409
     db.session.delete(run)
     db.session.commit()

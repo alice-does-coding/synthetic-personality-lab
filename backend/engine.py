@@ -560,9 +560,9 @@ def _agent_snapshot(agent, ghost_post=None, news_enabled=True, provider="mistral
 
     else:
         # Random baseline (legacy behavior)
-        if feed and random.random() < 0.70:
-            target = random.choice(feed)
-            reply_to = {"id": target.id, "content": target.content}
+        if feed_posts and random.random() < 0.70:
+            target = random.choice(feed_posts)
+            reply_to = {"id": target["id"], "content": target["content"]}
         elif news_enabled and not reply_to and random.random() >= 0.4:
             headlines = get_headlines(n=1)
 

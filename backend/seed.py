@@ -69,7 +69,10 @@ def _generate_bio(post_framing, persona_prompt=None, provider="mistral", model=N
     )
 
     messages = [{"role": "user", "content": prompt}]
-    resp = llm_chat(provider, model, messages, 150, 1.0)
+    # 300 tokens: enough headroom for a 1-2 sentence bio plus the JSON wrapper,
+    # even for verbose models. Truncation here surfaces as a JSON parse error
+    # ("Unterminated string ...") and the bio is dropped to a placeholder.
+    resp = llm_chat(provider, model, messages, 300, 1.0)
     raw_content = resp.choices[0].message.content if hasattr(resp, "choices") else resp
     raw = llm_extract_text(provider, raw_content).strip()
     raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("` \n")
