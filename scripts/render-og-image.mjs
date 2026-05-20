@@ -9,12 +9,12 @@ const svg = readFileSync(svgPath, 'utf8');
 
 const variants = [
   {
-    out: resolve(__dirname, '../og-image.png'),
+    out: resolve(__dirname, '../frontend/public/og-image.png'),
     width: 1200, height: 630,
     logoPx: 280, titlePx: 52, tagPx: 22, logoMb: 36,
   },
   {
-    out: resolve(__dirname, '../og-image-square.png'),
+    out: resolve(__dirname, '../frontend/public/og-image-square.png'),
     width: 1200, height: 1200,
     logoPx: 520, titlePx: 64, tagPx: 26, logoMb: 56,
   },
