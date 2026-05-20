@@ -102,25 +102,6 @@ export default function PostCard({ post, depth = 0 }) {
           }}>
             {post.content}
           </MarkdownText>
-          {isObserver && (
-            <Link
-              to="/create"
-              style={{
-                display: "inline-block",
-                marginTop: 6,
-                fontSize: 10,
-                color: "var(--text)",
-                opacity: 0.2,
-                textDecoration: "none",
-                letterSpacing: "0.06em",
-                transition: "opacity 0.3s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.opacity = 0.65}
-              onMouseLeave={e => e.currentTarget.style.opacity = 0.2}
-            >
-              what is this
-            </Link>
-          )}
         </div>
 
         {/* footer */}

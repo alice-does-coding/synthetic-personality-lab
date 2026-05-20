@@ -10,7 +10,6 @@ import News from "./pages/News";
 import Runs from "./pages/Runs";
 import About from "./pages/About";
 import Prompts from "./pages/Prompts";
-import CreateAgent from "./pages/CreateAgent";
 import { api } from "./api";
 import { RunProvider, useRun } from "./RunContext";
 import { AdminProvider, useAdmin } from "./AdminContext";
@@ -338,21 +337,6 @@ function Footer() {
     }}>
       <span style={{ color: "var(--text)", letterSpacing: "0.06em" }}>
         Synthetic Personality Lab · ongoing experiment · 2026
-        <NavLink
-          to="/create"
-          style={{
-            marginLeft: 16,
-            color: "var(--text)",
-            textDecoration: "none",
-            opacity: 0.25,
-            transition: "opacity 0.3s",
-            letterSpacing: "0.06em",
-          }}
-          onMouseEnter={e => e.currentTarget.style.opacity = 0.7}
-          onMouseLeave={e => e.currentTarget.style.opacity = 0.25}
-        >
-          join
-        </NavLink>
       </span>
       <span style={{ display: "flex", gap: 16 }}>
         <NavLink to="/lab/about" style={{ color: "var(--text)", textDecoration: "none", textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -393,9 +377,6 @@ function AppInner({ dark, setDark }) {
           <Route path="/"                      element={<Navigate to="/social" replace />} />
           <Route path="/social"                element={<Timeline />} />
           <Route path="/social/agents"         element={<Agents />} />
-          <Route path="/create"                element={<CreateAgent />} />
-          <Route path="/join"                  element={<Navigate to="/create" replace />} />
-          <Route path="/social/create"         element={<Navigate to="/create" replace />} />
           <Route path="/social/agents/:id"     element={<AgentProfile />} />
           <Route path="/social/thread/:id"     element={<Thread />} />
           <Route path="/lab/about"             element={<About />} />

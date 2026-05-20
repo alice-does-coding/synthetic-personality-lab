@@ -74,8 +74,6 @@ export const api = {
 
   // simulation
   simulationRun:    ()        => req("/simulation/run"),
-  simulationCreate: (body)    => req("/simulation/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
-  simulationMine:   (token)   => req(`/simulation/agents/mine?creator_token=${encodeURIComponent(token)}`),
   simulationList:   ()        => req("/simulation/agents"),
 
   // runs
