@@ -14,9 +14,7 @@ def list_runs():
     from models import Agent, PersonalitySnapshot, Post
     from engine import get_running_run_ids
 
-    is_admin = request.headers.get("X-Admin-Key") == current_app.config.get("ADMIN_KEY")
-    q = Run.query if is_admin else Run.query.filter_by(is_public=False)
-    runs = q.order_by(Run.id).all()
+    runs = Run.query.order_by(Run.id).all()
     running_ids = get_running_run_ids()
 
     # Snapshot-based tick floor per run (in case last_tick was reset or not saved)

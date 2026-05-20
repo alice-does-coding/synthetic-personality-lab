@@ -72,10 +72,6 @@ export const api = {
   thread:    (postId)              => req(`/posts/${postId}/thread`),
   ghostPost: (runId, content)     => adminReq("/posts/ghost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId, content }) }),
 
-  // simulation
-  simulationRun:    ()        => req("/simulation/run"),
-  simulationList:   ()        => req("/simulation/agents"),
-
   // runs
   listRuns:    ()        => adminReq("/runs/"),
   getRunEvents: (id)    => req(`/runs/${id}/events`),

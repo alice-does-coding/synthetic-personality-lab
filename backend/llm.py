@@ -4,8 +4,8 @@ All simulation code calls these functions instead of touching provider
 SDKs directly. The provider and model are stored on the Run record.
 
 One run = one model. On auth failure the call raises LLMAuthError and
-the calling layer (engine, simulation_run) stops the run cleanly — no
-silent fallback to another provider, which would contaminate the data.
+the calling layer (engine) stops the run cleanly — no silent fallback
+to another provider, which would contaminate the data.
 """
 from providers.base import LLMAuthError, LLMRateLimitError  # re-export for callers
 

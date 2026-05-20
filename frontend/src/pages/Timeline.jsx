@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import PostCard from "../components/PostCard";
-import { useSimulation } from "../SimulationContext";
+import { useRun } from "../RunContext";
 
 const TRAITS = [
   { key: "agent_openness",          label: "Openness",          short: "O", color: "#a78bfa" },
@@ -48,9 +48,8 @@ const ENG_TYPES = [
 ];
 
 export default function Timeline() {
-  const { simulationRunId, simulationRun, simulationLoaded } = useSimulation();
-  const viewingRunId = simulationRunId;
-  const isRunning    = simulationRun?.status === "running";
+  const { viewingRunId, viewingRun, runningRunIds, runsLoaded } = useRun();
+  const isRunning = runningRunIds?.includes(viewingRunId);
 
   const [posts,        setPosts]        = useState([]);
   const [pending,      setPending]      = useState([]);
@@ -66,7 +65,7 @@ export default function Timeline() {
   // Use max_post_tick (actual highest tick with posts) for the window calculation.
   // last_tick can be inflated when the tick counter ran ahead of post generation
   // (e.g. Mistral 401 stopped posts but IPIP tick counter kept going).
-  const maxTick    = simulationRun?.max_post_tick || simulationRun?.last_tick || 0;
+  const maxTick    = viewingRun?.max_post_tick || viewingRun?.last_tick || 0;
   const maxTickRef = useRef(maxTick);
   maxTickRef.current = maxTick;
 
@@ -129,8 +128,8 @@ export default function Timeline() {
     setPending([]);
   };
 
-  if (!simulationLoaded) return <p className="muted">Loading…</p>;
-  if (!simulationRunId)  return <p className="muted">Simulation not available.</p>;
+  if (!runsLoaded) return <p className="muted">Loading…</p>;
+  if (!viewingRunId)  return <p className="muted">No run selected.</p>;
 
   const sorted = sortPosts(posts, sortBy, trait);
 

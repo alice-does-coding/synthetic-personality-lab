@@ -13,7 +13,6 @@ import Prompts from "./pages/Prompts";
 import { api } from "./api";
 import { RunProvider, useRun } from "./RunContext";
 import { AdminProvider, useAdmin } from "./AdminContext";
-import { SimulationProvider } from "./SimulationContext";
 import "./App.css";
 
 function useDarkMode() {
@@ -407,9 +406,7 @@ export default function App() {
     <BrowserRouter>
       <AdminProvider>
         <RunProvider>
-          <SimulationProvider>
-            <AppInner dark={dark} setDark={setDark} />
-          </SimulationProvider>
+          <AppInner dark={dark} setDark={setDark} />
         </RunProvider>
       </AdminProvider>
     </BrowserRouter>
