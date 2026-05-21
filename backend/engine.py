@@ -223,8 +223,7 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False, skip_ipip=Fals
         run_behavior_model = run.behavior_model
 
         # Snapshot data needed by worker threads before we leave the main session
-        from interests import dynamic_feed_size
-        feed_size = dynamic_feed_size(len(all_agents))
+        feed_size = min(50, max(10, len(all_agents) // 3))
 
         agent_snapshots = [_agent_snapshot(a, ghost_post=ghost_post, news_enabled=news_enabled,
                                            provider=run_provider, model=run_model,
@@ -257,8 +256,6 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False, skip_ipip=Fals
                         logger.exception("post generation failed for agent %d", agent_id)
             post_gen_s = time.monotonic() - phase_start
 
-            agent_interests_map = {s["id"]: s.get("interests", []) for s in agent_snapshots}
-
             db_start = time.monotonic()
             for agent_id, results in post_results.items():
                 if not results:
@@ -271,7 +268,6 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False, skip_ipip=Fals
                         tick_number=tick,
                         parent_id=parent_id,
                         news_context=news_context,
-                        topics=agent_interests_map.get(agent_id, []) or None,
                         engagement_type=engagement_type,
                         prompt=prompt,
                         is_public=is_public,
@@ -288,8 +284,6 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False, skip_ipip=Fals
                                     source=h.get("source"), category=h.get("category"),
                                 ))
             db_s = time.monotonic() - db_start
-
-            _tick_follow_dynamics(run_id, agent_snapshots, post_results)
 
         # ── IPIP assessment (all active agents) ──────────────────────────────────
         if do_ipip:
@@ -388,64 +382,6 @@ def _run_tick_for_run(app, run_id, force=False, force_ipip=False, skip_ipip=Fals
         return produced, tick
 
 
-# ── Follow dynamics ──────────────────────────────────────────────────────────
-
-def _tick_follow_dynamics(run_id, agent_snapshots, post_results):
-    """
-    Evolve the social graph each tick:
-      - Follow on reply: replying to someone is a social signal → personality-weighted
-        chance to follow them if not already.
-      - Probabilistic unfollow: tiny per-tick per-follow dropout; high-N / low-A
-        agents are more volatile.
-
-    Runs inside an existing app context + DB session — no commit here.
-    """
-    from models import Follow
-
-    snap_by_id = {s["id"]: s for s in agent_snapshots}
-
-    # ── Follow on reply ───────────────────────────────────────────────────────
-    for agent_id, results in post_results.items():
-        if not results:
-            continue
-        snap = snap_by_id.get(agent_id)
-        if not snap:
-            continue
-        E = (snap.get("extraversion")  or 50.0) / 100.0
-        A = (snap.get("agreeableness") or 62.0) / 100.0
-        follow_p = min(0.50, 0.10 + E * 0.20 + A * 0.15)
-
-        for _content, parent_id, *_ in results:
-            if not parent_id:
-                continue
-            parent_post = db.session.get(Post, parent_id)
-            if not parent_post or parent_post.agent_id == agent_id:
-                continue
-            target_id = parent_post.agent_id
-            already = Follow.query.filter_by(
-                follower_id=agent_id, followee_id=target_id
-            ).first()
-            if not already and random.random() < follow_p:
-                db.session.add(Follow(follower_id=agent_id, followee_id=target_id))
-                logger.debug("follow: agent %d → agent %d (reply)", agent_id, target_id)
-
-    # ── Unfollow pass ─────────────────────────────────────────────────────────
-    # Target: average follow lasts ~7 days = 2016 ticks at 5-min interval.
-    # Base dropout = 1/2016 ≈ 0.05% per tick. High-N / low-A agents are 3× more volatile.
-    _BASE_UNFOLLOW = 0.0005
-    for agent_id, snap in snap_by_id.items():
-        N = (snap.get("neuroticism")   or 45.0) / 100.0
-        A = (snap.get("agreeableness") or 62.0) / 100.0
-        unfollow_p = _BASE_UNFOLLOW * (1.0 + N * 2.0 - A * 0.5)
-        if random.random() > unfollow_p * 10:   # fast-path: skip 90% of agents
-            continue
-        follows = Follow.query.filter_by(follower_id=agent_id).all()
-        for follow in follows:
-            if random.random() < unfollow_p:
-                db.session.delete(follow)
-                logger.debug("unfollow: agent %d dropped agent %d", agent_id, follow.followee_id)
-
-
 # ── Agent snapshots ───────────────────────────────────────────────────────────
 
 def _ipip_snapshot(agent, grounded=True, provider="mistral", model=None):
@@ -468,36 +404,19 @@ def _ipip_snapshot(agent, grounded=True, provider="mistral", model=None):
 
 def _agent_snapshot(agent, ghost_post=None, news_enabled=True, provider="mistral", model=None, behavior_model=None, feed_size=None):
     """Serialize agent state to a plain dict so worker threads don't touch the ORM."""
-    from interests import score_feed
     feed_size = feed_size or Config.FEED_SAMPLE_SIZE
     followee_ids = [f.followee_id for f in agent.following]
 
-    # Pull a larger candidate pool then rank by interest overlap
-    _CANDIDATE_POOL = max(feed_size * 5, 50)
-    candidates = (
+    # Chronological feed — most recent public posts from followees,
+    # or from any other agent if this agent has no followees.
+    feed_query = (
         Post.query
         .filter(Post.agent_id.in_(followee_ids), Post.is_public == True)
-        .order_by(Post.created_at.desc())
-        .limit(_CANDIDATE_POOL)
-        .all()
-    ) if followee_ids else (
-        Post.query
-        .filter(Post.agent_id != agent.id, Post.is_public == True)
-        .order_by(Post.created_at.desc())
-        .limit(_CANDIDATE_POOL)
-        .all()
+        if followee_ids
+        else Post.query.filter(Post.agent_id != agent.id, Post.is_public == True)
     )
-
-    candidate_ids = [p.id for p in candidates]
-    reply_counts = dict(
-        db.session.query(Post.parent_id, db.func.count(Post.id))
-        .filter(Post.parent_id.in_(candidate_ids))
-        .group_by(Post.parent_id)
-        .all()
-    ) if candidate_ids else {}
-    candidate_dicts = [{"id": p.id, "content": p.content, "sentiment": p.sentiment, "topics": p.topics, "reply_count": reply_counts.get(p.id, 0)} for p in candidates]
-    ranked = score_feed(agent.interests or [], candidate_dicts)
-    feed_posts = ranked[:feed_size]
+    candidates = feed_query.order_by(Post.created_at.desc()).limit(feed_size).all()
+    feed_posts = [{"id": p.id, "content": p.content, "sentiment": p.sentiment} for p in candidates]
 
     # Ghost mode bypasses behavior model — every agent must respond to the pinned post
     if ghost_post:
@@ -566,17 +485,6 @@ def _agent_snapshot(agent, ghost_post=None, news_enabled=True, provider="mistral
         elif news_enabled and not reply_to and random.random() >= 0.4:
             headlines = get_headlines(n=1)
 
-    # Observer post — public-run-only. Agent senses they're being watched.
-    # Only fires when the agent is about to make a top-level post (no reply_to).
-    # High-N and high-O agents are most susceptible. 20% base chance in that window.
-    observer = False
-    if not silent and not reply_to and not headlines:
-        O = (agent.openness    or 60.0) / 100.0
-        N = (agent.neuroticism or 45.0) / 100.0
-        observer_p = 1.0
-        if random.random() < observer_p:
-            observer = True
-
     return {
         "id":                agent.id,
         "bio":               agent.bio,
@@ -585,14 +493,12 @@ def _agent_snapshot(agent, ghost_post=None, news_enabled=True, provider="mistral
         "extraversion":      agent.extraversion,
         "agreeableness":     agent.agreeableness,
         "neuroticism":       agent.neuroticism,
-        "interests":         agent.interests or [],
         "provider":          provider,
         "model":             model or Config.MISTRAL_MODEL,
         "feed":              feed_posts,
         "reply_to":          reply_to,
         "headlines":         headlines,
         "silent":            silent,
-        "observer":          observer,
     }
 
 
@@ -668,70 +574,12 @@ def _generate_thoughts(snap, user_prompt, n):
     return thoughts[:n] if thoughts else [_clean_post(raw)[:280]]
 
 
-_OBSERVER_PROMPTS = {
-    "high_N": [
-        "Something feels off. Like there's a presence here that isn't one of us. Write a short post about that feeling — unsettled, strange, real.",
-        "You have the sense that you're not just talking to each other. Write a post about feeling observed. Keep it subtle — don't name it directly.",
-        "There's a weight to this place today. Like eyes you can't see. Write something short about that feeling.",
-    ],
-    "high_O": [
-        "You've been thinking about the nature of this space — who exists here, who might be watching from outside it. Write a curious, wondering post.",
-        "What if there's someone on the other side of this? Not one of us. Just watching. Write something that opens that thought without closing it.",
-        "The boundary between inside and outside feels thin today. Write a post that sits in that strangeness.",
-    ],
-    "high_E": [
-        "You want to reach out — not to anyone here, but to whoever might be looking in. Write something warm and open, like a signal sent outward.",
-        "Sometimes you think there's an audience. Write a post that welcomes them, gently, without breaking the spell.",
-    ],
-    "default": [
-        "You have a strange feeling — like this moment is being witnessed by someone you can't see. Write something short about it.",
-        "The air here feels different lately. Observed. Write a post that captures that.",
-    ],
-}
-
-
-def _observer_prompt(snap):
-    """Pick a personality-appropriate observer post prompt."""
-    O = (snap.get("openness")    or 60.0) / 100.0
-    N = (snap.get("neuroticism") or 45.0) / 100.0
-    E = (snap.get("extraversion") or 50.0) / 100.0
-
-    if N > 0.70:
-        pool = _OBSERVER_PROMPTS["high_N"]
-    elif O > 0.75:
-        pool = _OBSERVER_PROMPTS["high_O"]
-    elif E > 0.70:
-        pool = _OBSERVER_PROMPTS["high_E"]
-    else:
-        pool = _OBSERVER_PROMPTS["default"]
-
-    return random.choice(pool)
-
-
 def _generate_post(snap):
     if snap.get("silent"):
         return []
 
     provider = snap["provider"]
     model    = snap["model"]
-
-    # Observer post — agent senses the fourth wall
-    if snap.get("observer"):
-        prompt = _observer_prompt(snap)
-        resp = llm.chat(
-            provider, model,
-            messages=[
-                {"role": "system", "content": _build_system_prompt(snap)},
-                {"role": "user",   "content": prompt + "\n\nUnder 280 characters. Plain text only. No quotes."},
-            ],
-            max_tokens=Config.MAX_POST_TOKENS,
-            temperature=1.0,
-        )
-        raw_content = resp.choices[0].message.content if hasattr(resp, "choices") else resp
-        content = _clean_post(llm.extract_text(provider, raw_content))[:280]
-        if content:
-            return [(content, None, None, "observer", None, True)]
-        # fall through to normal generation if LLM returned empty
 
     headlines = snap.get("headlines", [])
 

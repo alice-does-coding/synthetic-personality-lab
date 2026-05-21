@@ -6,9 +6,9 @@
 
 > A research instrument for studying personality drift in LLM agents. Each agent has a measurable Big Five profile, lives inside a simulated social feed, and self-assesses on the IPIP-NEO-120 every ten ticks. Drop in an API key, pick a model and a persona archetype, and watch the population converge.
 
-A research run draws its founding population from a persona archetype JSON in `seed/personas/` — the archetype defines Big Five priors plus a `name_pool` (e.g. the Greek pantheon, the Major Arcana). The seeder samples scores from those priors and the LLM generates each agent's bio in character. Each agent then has an interest signature derived deterministically from OCEAN. Agents post, reply, and react to live news; the simulation evolves without human interaction.
+A research run draws its founding population from a persona archetype JSON in `seed/personas/` — the archetype defines Big Five priors plus a `name_pool` (e.g. the Greek pantheon, the biblical villains, the chess board). The seeder samples Big Five scores from those priors and the LLM generates each agent's bio in character. Agents post, reply, and react to live news; the simulation evolves without human interaction.
 
-The measurement loop centers on the [IPIP-NEO-120](https://ipip.ori.org/) (Johnson 2014, public domain). Every ten ticks, each agent answers all 120 items grounded in its 20 most recent posts and private thoughts. Scores update; bios are rewritten from the agent's own recent behavior. The self-model is purely behavioral — IPIP scores never feed back into post-generation prompts, only into the next snapshot, so drift is observed without being induced.
+The measurement loop centers on the [IPIP-NEO-120](https://ipip.ori.org/) (Johnson 2014, public domain). Every ten ticks, each agent answers all 120 items grounded in its 20 most recent posts and private thoughts. The agent's Big Five scores are then overwritten with the new self-assessment. The self-model is purely behavioral — IPIP scores never feed back into post-generation prompts, only into the next snapshot, so drift is observed without being induced.
 
 ---
 
@@ -16,9 +16,9 @@ The measurement loop centers on the [IPIP-NEO-120](https://ipip.ori.org/) (Johns
 
 | | |
 |---|---|
-| **A behavior model, not a chatbot loop** | Agents don't post on a timer. Each tick they evaluate available stimuli — feed posts, news headlines, the organic impulse to post unprompted — through the [Fogg Behavior Model](https://behaviormodel.org/) (`B = M·A·P`). Motivation is computed from OCEAN traits; if nothing clears the threshold, the agent stays silent. Most agents are silent on most ticks, which is the point. |
-| **Interest graph, not a recommender** | Feed ranking is Jaccard overlap on interest tags derived deterministically from OCEAN. A high-openness, low-conscientiousness agent gravitates to philosophy and art; a high-neuroticism agent toward politics and conflict. This is enough to keep engagement density stable from 20 agents to 15k — no embeddings, no learned ranker. |
-| **A measurement loop, not just a generator** | Every 10 ticks, all agents take the full IPIP-NEO-120 self-assessment grounded in their last 20 posts and private thoughts. The 120 raw item scores are stored. Big Five scores update. The agent's bio is rewritten from its own recent behavior. The self-model is purely behavioral — scores never feed back into prompts, only into the next snapshot. |
+| **Two behavior models, the simpler one by default** | The default is a random baseline (70% reply, 60% news, else organic) — no OCEAN coupling, so post rate is uniform across the population and IPIP grounding density is comparable across agents. The opt-in alternative is the [Fogg Behavior Model](https://behaviormodel.org/) (`B = M·A·P`), where motivation is computed from OCEAN traits and the agent stays silent below threshold. Fogg is exposed as an off-by-default toggle in the run creation modal — flip it on when you want OCEAN-coupled post rate as an explicit experimental manipulation. |
+| **A chronological feed, deliberately** | Feed ranking is plain reverse-chronological from each agent's followees (or, when an agent has no followees, from the whole run). No interest tags, no embedding-based ranker, no hotness boost — the simpler the feed, the fewer hidden moderators on drift. |
+| **A measurement loop, not just a generator** | Every 10 ticks, all agents take the full IPIP-NEO-120 self-assessment grounded in their last 20 posts and private thoughts. The 120 raw item scores are stored. Big Five scores update. The self-model is purely behavioral — scores never feed back into post-generation prompts, only into the next snapshot, so drift is observed without being induced. |
 | **Provider-agnostic LLM router with proactive rate limiting** | One adapter each for Mistral, Hugging Face Inference (Qwen, Llama, DeepSeek), and Anthropic (Claude Opus/Sonnet/Haiku). A monotonic token-bucket per provider governs all worker threads simultaneously. A per-tick auth-failure latch halts in-flight workers on the first 401 to prevent log floods. Exponential backoff on 5xx/429, explicit handling for 400/403/422. |
 | **One run, one model** | Auth failures stop the run cleanly — no silent fallback to another provider, which would contaminate the data. Studying drift means studying *that* model, not a mixture. |
 
@@ -152,32 +152,88 @@ When `name_pool` is set, the seeder pins `agent_count` to the pool length so eve
 
 ## How a tick works
 
-A tick is the unit of simulation. Research runs configurable (default 30s, or `batch_mode` for back-to-back ticks).
+A tick is the unit of simulation. Research runs configurable (default 30s, or `batch_mode` for back-to-back ticks). Every tick is either a **measurement tick** (IPIP-NEO-120 self-assessment, every `REASSESSMENT_INTERVAL` ticks) or a **behavior tick** (sampled agents may post). The two branches never run on the same tick.
 
 ```mermaid
 flowchart TD
     START(["Tick starts"])
-    IPIP_CHECK{"tick % REASSESSMENT_INTERVAL<br/>== 0 ?"}
+    IPIP_CHECK{"tick %<br/>REASSESSMENT_INTERVAL<br/>== 0 ?"}
 
-    IPIP["All agents take <b>IPIP-NEO-120</b><br/>grounded in their last 20 posts +<br/>private thoughts<br/><i>scores update · bios rewritten</i>"]
+    subgraph IPIP_PATH ["Measurement tick — IPIP-NEO-120"]
+        direction TB
+        IPIP_GROUND["For each active agent, pull<br/>last 20 posts (public + private monologue)"]
+        IPIP_LLM["LLM rates 120 IPIP items 1–5<br/><b>system prompt is anonymous</b><br/>('Assess yourself based only on<br/>your recent posts and thoughts.')<br/><i>no name, no handle, no OCEAN injected</i>"]
+        IPIP_SCORE["Score 120 items → Big Five (0–100)<br/>per Johnson 2014 keying"]
+        IPIP_WRITE["Persist:<br/>· IpipResponse (raw items)<br/>· PersonalitySnapshot (time-series)<br/>· <b>Agent.OCEAN ← new scores</b><br/><i>only place OCEAN is ever written</i>"]
+        IPIP_GROUND --> IPIP_LLM --> IPIP_SCORE --> IPIP_WRITE
+    end
 
-    SAMPLE["Sample up to <code>AGENTS_PER_TICK</code><br/>agents from the active run"]
-    FOGG["Per agent, score <b>B = M·A·P</b> motivation for:<br/>· reply to each feed post<br/>· post about each news headline<br/>· organic impulse (no stimulus)"]
-    THRESHOLD{"max motivation<br/>≥ 0.30 ?"}
-    SILENT["Agent stays silent this tick"]
-    GENERATE["Generate <code>N_THOUGHTS=3</code> candidates<br/>publish 1, store 2 as private monologue<br/><i>(re-emerge in the next IPIP prompt)</i>"]
-    NLPBG["Background thread: sentiment +<br/>emotion analysis on the published post"]
+    subgraph POST_PATH ["Behavior tick — post generation"]
+        direction TB
+        SAMPLE["Sample up to AGENTS_PER_TICK<br/>active agents from the run"]
+        BEHAVIOR{"Run.behavior_model"}
+        FOGG["<b>Fogg B = M·A·P</b> (opt-in manipulation)<br/><i>reads OCEAN to score motivation</i><br/>per (agent × stimulus)<br/>choose reply / news / organic / silent<br/><b>off by default — toggle in modal</b>"]
+        LEGACY["<b>Random baseline</b> (default — <code>null</code>)<br/>· 70% reply if feed non-empty<br/>· 60% news if enabled & not replying<br/>· else organic<br/><i>does NOT read OCEAN</i>"]
+        ACTION{"chosen<br/>action"}
+        SILENT["Agent silent this tick<br/>(map only)"]
+        REPLY["Reply to feed post"]
+        NEWS["Post about headline"]
+        ORGANIC["Organic post (feed only,<br/>no specific stimulus)"]
+        GEN["Generate N_THOUGHTS=3 candidates<br/>publish 1, store 2 as private monologue<br/>(monologue re-emerges in next IPIP prompt)<br/><i>system prompt is bio only — no OCEAN</i>"]
+        NLP["Background thread:<br/>sentiment + emotion (HF Inference)"]
+
+        SAMPLE --> BEHAVIOR
+        BEHAVIOR -->|'map'| FOGG --> ACTION
+        BEHAVIOR -->|null<br/>default| LEGACY --> ACTION
+        ACTION -->|silent| SILENT
+        ACTION -->|reply| REPLY --> GEN
+        ACTION -->|news| NEWS --> GEN
+        ACTION -->|organic| ORGANIC --> GEN
+        GEN --> NLP
+    end
 
     END(["Tick ends"])
 
     START --> IPIP_CHECK
-    IPIP_CHECK -->|yes| IPIP --> END
-    IPIP_CHECK -->|no| SAMPLE --> FOGG --> THRESHOLD
-    THRESHOLD -->|no| SILENT --> END
-    THRESHOLD -->|yes| GENERATE --> NLPBG --> END
+    IPIP_CHECK -->|yes| IPIP_PATH --> END
+    IPIP_CHECK -->|no| POST_PATH --> END
 ```
 
 The whole loop runs continuously inside a daemon thread per run. Multiple research runs can tick in parallel, sharing the provider rate limiter.
+
+### OCEAN data flow & invariants
+
+The experiment's core invariant is that **OCEAN scores are an output of measurement, not an input to behavior**. The chart below shows every place OCEAN is read and written. The only path that writes `Agent.OCEAN` is the IPIP scoring loop. The only path that reads OCEAN to shape *what gets generated* is the optional Fogg gate, and even that only affects **which prompt fires** (reply / news / organic / silent), never the content of the prompt itself.
+
+```mermaid
+flowchart LR
+    SEED[("Persona priors<br/>seed/personas/*.json")]
+    AGENT[("<b>Agent.OCEAN</b><br/>live row")]
+    SNAP[("PersonalitySnapshot<br/>time series")]
+    POST[("Post.content")]
+
+    FOGG_RD["Fogg gate<br/>(opt-in manipulation,<br/>off by default)<br/><i>gates which prompt fires —<br/>does not shape content</i>"]
+    BIO_PROMPT["Post system prompt<br/>'About you: {bio}'<br/><i>bio only — no OCEAN</i>"]
+
+    IPIP_GROUND["IPIP grounding<br/>last 20 posts<br/>(public + monologue)"]
+    IPIP_SYS["IPIP system prompt<br/>anonymous —<br/>no OCEAN, no name"]
+    LLM["LLM scores<br/>120 items"]
+
+    SEED -->|sampled at seed| AGENT
+    AGENT -.read when fogg on.-> FOGG_RD
+    AGENT -.bio only.-> BIO_PROMPT
+
+    FOGG_RD -->|gates prompt selection| POST
+    BIO_PROMPT --> POST
+
+    POST --> IPIP_GROUND
+    IPIP_GROUND --> LLM
+    IPIP_SYS --> LLM
+    LLM ==>|writes scores| AGENT
+    LLM ==>|writes scores| SNAP
+```
+
+**Legend.** Dashed arrows are reads; double arrows (`==>`) are writes. `Agent.OCEAN` has exactly one inbound write (LLM IPIP score) and zero content-shaping reads — the clean attractor test holds. Fogg, when on, couples *post rate* to OCEAN (high-extraversion agents reply more, etc.) but not *post content*; that coupling is an explicit experimental manipulation, not a contaminant.
 
 ---
 

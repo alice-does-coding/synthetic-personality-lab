@@ -179,6 +179,7 @@ function autoName(model, newsEnabled, persona, tickLimit) {
 const DEFAULTS = {
   name: "", description: "", provider: "hf", model: "Qwen/Qwen2.5-72B-Instruct",
   news_enabled: true, batch_mode: true, ipip_grounded: true,
+  fogg_enabled: false,
   random_seed: "", name_pool_text: "", agent_framing: "",
   persona: null, agent_count: 50, tick_limit: 100, notes: "",
 };
@@ -235,11 +236,12 @@ function CreateRunModal({ onCreated, onClose }) {
     try {
       await api.createRun({
         ...form,
-        post_framing: form.agent_framing,
-        agent_count:  parseInt(form.agent_count) || null,
-        tick_limit:   parseInt(form.tick_limit)  || null,
-        random_seed:  form.random_seed !== "" ? parseInt(form.random_seed) : null,
-        name_pool:    form.name_pool_text.trim()
+        post_framing:   form.agent_framing,
+        behavior_model: form.fogg_enabled ? "map" : null,
+        agent_count:    parseInt(form.agent_count) || null,
+        tick_limit:     parseInt(form.tick_limit)  || null,
+        random_seed:    form.random_seed !== "" ? parseInt(form.random_seed) : null,
+        name_pool:      form.name_pool_text.trim()
           ? form.name_pool_text.split("\n").map(s => s.trim()).filter(Boolean)
           : null,
       });
@@ -332,8 +334,9 @@ function CreateRunModal({ onCreated, onClose }) {
         <SectionLabel>experiment</SectionLabel>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <Toggle label="ipip grounded" value={form.ipip_grounded} onChange={set("ipip_grounded")} />
-          <Input label="random seed" value={form.random_seed} onChange={set("random_seed")} type="number" placeholder="leave blank for random" />
+          <Toggle label="fogg gate" value={form.fogg_enabled} onChange={set("fogg_enabled")} />
         </div>
+        <Input label="random seed" value={form.random_seed} onChange={set("random_seed")} type="number" placeholder="leave blank for random" />
 
         <SectionLabel>notes</SectionLabel>
         <Textarea label="" value={form.notes} onChange={set("notes")} placeholder="Hypothesis, context, what changed..." rows={2} />
