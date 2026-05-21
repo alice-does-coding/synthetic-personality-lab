@@ -183,6 +183,18 @@ const DEFAULTS = {
   persona: null, agent_count: 50, tick_limit: 100, notes: "",
 };
 
+// One-click experiment presets — each patch is merged into the form on click.
+// Cast contrasts at a glance: dark/light × biblical/fairy with news as moderator,
+// plus two low-stim controls (woodland critters and the chess board).
+const PRESETS = [
+  { label: "biblical villains × news", patch: { persona: "biblical-villains",   news_enabled: true  } },
+  { label: "biblical heroes × news",   patch: { persona: "biblical-heroes",     news_enabled: true  } },
+  { label: "fairy villains × news",    patch: { persona: "fairy-tale-villains", news_enabled: true  } },
+  { label: "fairy heroes × news",      patch: { persona: "fairy-tale-heroes",   news_enabled: true  } },
+  { label: "cozy control",             patch: { persona: "woodland-critters",   news_enabled: false } },
+  { label: "chess board",              patch: { persona: "chess-board",         news_enabled: false } },
+];
+
 function CreateRunModal({ onCreated, onClose }) {
   const [form, setForm] = useState(() => ({ ...DEFAULTS, name: autoName(DEFAULTS.model, DEFAULTS.news_enabled, null, DEFAULTS.tick_limit) }));
   const [personas, setPersonas] = useState([]);
@@ -205,6 +217,14 @@ function CreateRunModal({ onCreated, onClose }) {
         key === "persona"      ? val : next.persona,
         key === "tick_limit"   ? val : next.tick_limit,
       );
+    }
+    return next;
+  });
+
+  const applyPreset = (patch) => setForm(f => {
+    const next = { ...f, ...patch };
+    if (!nameEdited.current) {
+      next.name = autoName(next.model, next.news_enabled, next.persona, next.tick_limit);
     }
     return next;
   });
@@ -245,6 +265,15 @@ function CreateRunModal({ onCreated, onClose }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ ...mono, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-h)" }}>New Run</span>
           <button onClick={onClose} style={{ ...mono, fontSize: 16, background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+
+        <SectionLabel>presets</SectionLabel>
+        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          {PRESETS.map(p => (
+            <button key={p.label} onClick={() => applyPreset(p.patch)} style={{ ...mono, fontSize: 10, fontWeight: 700, padding: "4px 10px", cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}>
+              {p.label}
+            </button>
+          ))}
         </div>
 
         <SectionLabel>identity</SectionLabel>

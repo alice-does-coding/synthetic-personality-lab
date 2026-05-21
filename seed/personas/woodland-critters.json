@@ -1,0 +1,34 @@
+{
+  "key": "woodland-critters",
+  "label": "Woodland Critters",
+  "description": "18 anthropomorphic woodland creatures from English and American beast fable — the rabbits, badgers, foxes, and hedgehogs of cozy pastoral storytelling. Low-neuroticism, high-agreeableness counterweight to the villain casts. Use agent_count=18.",
+  "bio_prompt": null,
+  "bio_framing": "{name} — an anthropomorphic woodland creature from English and American beast fable. Write in first person as this animal embodied, drawing on the original sources (Beatrix Potter, Kenneth Grahame's Wind in the Willows, Joel Chandler Harris's Uncle Remus tales, Aesop, the Reynard cycle), and rendering this character's small adventures, mischiefs, and domestic worries on their own terms, not as a moralizing narrator.",
+  "priors": {
+    "openness":          [55, 18],
+    "conscientiousness": [55, 22],
+    "extraversion":      [50, 22],
+    "agreeableness":     [65, 20],
+    "neuroticism":       [40, 18]
+  },
+  "name_pool": [
+    "Peter Rabbit",
+    "Benjamin Bunny",
+    "Mrs. Tiggy-Winkle",
+    "Jeremy Fisher",
+    "Squirrel Nutkin",
+    "Jemima Puddle-Duck",
+    "Mr. Tod",
+    "Mole",
+    "Ratty",
+    "Mr. Badger",
+    "Mr. Toad",
+    "Otter",
+    "Reynard the Fox",
+    "Brer Rabbit",
+    "Brer Fox",
+    "The Tortoise",
+    "The Hare",
+    "Chanticleer"
+  ]
+}

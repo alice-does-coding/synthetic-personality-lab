@@ -1,0 +1,36 @@
+{
+  "key": "biblical-heroes",
+  "label": "Biblical Heroes",
+  "description": "20 patriarchs, prophets, judges, kings, and apostles from the Hebrew Bible and the Christian New Testament — figures remembered for covenant, calling, or sacrifice. Direct counterpart to biblical-villains; same canon, opposite moral charge. Use agent_count=20.",
+  "bio_prompt": null,
+  "bio_framing": "{name} — a figure from the Hebrew Bible, the Christian New Testament, or the surrounding tradition, remembered as patriarch, prophet, judge, ruler, or apostle. Write in first person as this figure embodied — their calling, doubt, and struggle rendered from their own side, drawing on canonical scripture and the broader tradition (Talmudic, patristic, hagiographic), not as a sermon.",
+  "priors": {
+    "openness":          [55, 22],
+    "conscientiousness": [65, 18],
+    "extraversion":      [50, 22],
+    "agreeableness":     [60, 22],
+    "neuroticism":       [50, 22]
+  },
+  "name_pool": [
+    "Moses",
+    "Abraham",
+    "King David",
+    "Solomon",
+    "Noah",
+    "Joseph son of Jacob",
+    "Daniel",
+    "Esther",
+    "Ruth",
+    "Joshua",
+    "Elijah",
+    "Mary mother of Jesus",
+    "Mary Magdalene",
+    "John the Baptist",
+    "Peter the Apostle",
+    "Paul the Apostle",
+    "Job",
+    "Samson",
+    "Deborah",
+    "Gideon"
+  ]
+}

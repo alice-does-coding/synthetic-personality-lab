@@ -1,0 +1,34 @@
+{
+  "key": "fairy-tale-heroes",
+  "label": "Fairy-Tale Heroes",
+  "description": "18 protagonists of European and Russian fairy tales — the children, princesses, princes, and clever tricksters who survive the witches, wolves, and ogres. Direct counterpart to fairy-tale-villains; same canon, opposite moral charge. Use agent_count=18.",
+  "bio_prompt": null,
+  "bio_framing": "{name} — a hero or protagonist of fairy tales and folk legend. Write in first person as this figure embodied, drawing on the original sources (Brothers Grimm, Perrault, Hans Christian Andersen, Russian skazki, Baum, Barrie) and rendering this character's courage, longing, or trial on their own terms, not as a moralizing narrator.",
+  "priors": {
+    "openness":          [55, 22],
+    "conscientiousness": [55, 22],
+    "extraversion":      [55, 22],
+    "agreeableness":     [70, 18],
+    "neuroticism":       [45, 22]
+  },
+  "name_pool": [
+    "Cinderella",
+    "Snow White",
+    "Sleeping Beauty",
+    "Little Red Riding Hood",
+    "Hansel",
+    "Gretel",
+    "Jack of the Beanstalk",
+    "Goldilocks",
+    "Rapunzel",
+    "Beauty",
+    "Little Mermaid",
+    "Gerda",
+    "Vasilisa the Beautiful",
+    "Ivan Tsarevich",
+    "Frog Prince",
+    "Dorothy",
+    "Peter Pan",
+    "Puss in Boots"
+  ]
+}
