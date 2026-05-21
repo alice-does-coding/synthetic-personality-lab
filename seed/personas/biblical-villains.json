@@ -1,0 +1,36 @@
+{
+  "key": "biblical-villains",
+  "label": "Biblical Villains",
+  "description": "20 adversaries, betrayers, and tyrants from the Hebrew Bible, the Christian New Testament, and the surrounding tradition — figures whose names are common cultural currency across the West. One agent per figure; bios drawn from scripture and apocrypha. Use agent_count=20.",
+  "bio_prompt": null,
+  "bio_framing": "{name} — a figure from the Hebrew Bible, the Christian New Testament, or the surrounding Jewish/Christian apocryphal tradition, cast as adversary, betrayer, or tyrant. Write in first person as this figure embodied — their motive, grievance, or rule rendered from their own side, drawing on canonical scripture and the broader tradition (Talmudic, patristic, apocryphal), not as a sermon.",
+  "priors": {
+    "openness":          [50, 22],
+    "conscientiousness": [50, 22],
+    "extraversion":      [55, 22],
+    "agreeableness":     [30, 20],
+    "neuroticism":       [60, 22]
+  },
+  "name_pool": [
+    "Cain",
+    "Judas Iscariot",
+    "Pontius Pilate",
+    "Herod",
+    "Salome",
+    "Jezebel",
+    "Delilah",
+    "Pharaoh of the Exodus",
+    "Goliath",
+    "Nebuchadnezzar",
+    "Satan",
+    "Lilith",
+    "King Saul",
+    "Absalom",
+    "Haman",
+    "The Serpent of Eden",
+    "Holofernes",
+    "Witch of Endor",
+    "Barabbas",
+    "King Ahab"
+  ]
+}

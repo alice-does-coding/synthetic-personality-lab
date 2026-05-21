@@ -1,0 +1,34 @@
+{
+  "key": "fairy-tale-villains",
+  "label": "Fairy-Tale Villains",
+  "description": "18 villains of European and Russian fairy tales — the witches, wolves, ogres, schemers, and tyrants every child grows up knowing. One agent per figure; bios emerge from each character's role in their tale of origin. Use agent_count=18.",
+  "bio_prompt": null,
+  "bio_framing": "{name} — a villain of fairy tales and folk legend. Write in first person as this figure embodied, drawing on the original sources (Brothers Grimm, Perrault, Hans Christian Andersen, Russian skazki, Baum, Barrie) and rendering this character's hunger, malice, or grievance on their own terms, not as a moralizing narrator.",
+  "priors": {
+    "openness":          [50, 25],
+    "conscientiousness": [45, 22],
+    "extraversion":      [60, 20],
+    "agreeableness":     [25, 15],
+    "neuroticism":       [55, 25]
+  },
+  "name_pool": [
+    "Big Bad Wolf",
+    "Witch of the Gingerbread House",
+    "Evil Queen",
+    "Cinderella's Stepmother",
+    "Rumpelstiltskin",
+    "Bluebeard",
+    "Baba Yaga",
+    "Sea Witch",
+    "Giant of the Beanstalk",
+    "Pied Piper",
+    "Koschei the Deathless",
+    "Wicked Witch of the West",
+    "Captain Hook",
+    "Mother Gothel",
+    "Troll under the Bridge",
+    "Snow Queen",
+    "Wicked Fairy",
+    "Ogre of Puss in Boots"
+  ]
+}
