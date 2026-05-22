@@ -6,24 +6,19 @@ from anthropic import Anthropic
 from anthropic import APIStatusError, APIConnectionError, APITimeoutError, RateLimitError, AuthenticationError
 
 from config import Config
+from providers._throttle import ProviderGate
 from providers.base import LLMAuthError, LLMRateLimitError
 
 logger = logging.getLogger(__name__)
 
-# ── Rate limiter ──────────────────────────────────────────────────────────────
-
-_rl_lock = threading.Lock()
-_rl_next = 0.0  # monotonic time when next call is allowed
-
-# Auth-failure latch — set on first 401; bail in-flight workers without retrying.
-_auth_failed = threading.Event()
+_gate = ProviderGate(rate_limit=Config.ANTHROPIC_RATE_LIMIT, name="anthropic")
 
 _client_lock = threading.Lock()
 _client = None
 
 
 def reset_auth():
-    _auth_failed.clear()
+    _gate.reset_auth()
 
 
 def _get_client():
@@ -56,8 +51,7 @@ def chat(messages, max_tokens, temperature, model):
 
     Raises LLMAuthError on 401. Raises LLMRateLimitError if retries exhausted on 429.
     """
-    global _rl_next
-    if _auth_failed.is_set():
+    if _gate.is_auth_failed():
         raise LLMAuthError("Anthropic API key invalid (auth failure already seen this tick)")
 
     system, msgs = _split_system(messages)
@@ -73,19 +67,13 @@ def chat(messages, max_tokens, temperature, model):
     client = _get_client()
     max_retries = 6
     for attempt in range(max_retries):
-        with _rl_lock:
-            now = time.monotonic()
-            wait = _rl_next - now
-            if wait > 0:
-                time.sleep(wait)
-            _rl_next = time.monotonic() + (1.0 / Config.ANTHROPIC_RATE_LIMIT)
+        _gate.acquire()
 
         try:
             resp = client.messages.create(**kwargs)
         except AuthenticationError as exc:
-            if not _auth_failed.is_set():
+            if _gate.mark_auth_failed():
                 logger.error("Anthropic 401 — invalid or exhausted API key. Stopping.")
-                _auth_failed.set()
             raise LLMAuthError(str(exc)) from exc
         except RateLimitError as exc:
             if attempt < max_retries - 1:

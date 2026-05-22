@@ -3,34 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { api } from "../api";
 import MarkdownText from "../components/MarkdownText";
 import Avatar from "../components/Avatar";
-
-function Headline({ h, mode }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "baseline", gap: 8,
-      padding: "5px 10px", marginBottom: 10,
-      background: "rgba(232,121,249,0.05)",
-      borderLeft: "2px solid var(--fuchsia, #e879f9)",
-    }}>
-      <span style={{
-        fontSize: 10, fontWeight: 700, color: "var(--fuchsia, #e879f9)",
-        textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap", flexShrink: 0,
-      }}>
-        {h.source} · {h.category}{mode ? ` · ${mode}` : ""}
-      </span>
-      {h.url ? (
-        <a href={h.url} target="_blank" rel="noopener noreferrer" style={{
-          fontSize: 12, color: "var(--text-h)", lineHeight: 1.4, textDecoration: "none",
-          overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical",
-        }}>
-          {h.title}
-        </a>
-      ) : (
-        <span style={{ fontSize: 12, color: "var(--text-h)", lineHeight: 1.4 }}>{h.title}</span>
-      )}
-    </div>
-  );
-}
+import Headline from "../components/Headline";
 
 function buildTree(posts) {
   const byId = {};

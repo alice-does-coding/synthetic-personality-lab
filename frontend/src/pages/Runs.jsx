@@ -203,7 +203,7 @@ function CreateRunModal({ onCreated, onClose }) {
   const [error, setError] = useState(null);
   const nameEdited = useRef(false);
 
-  useState(() => { api.listPersonas().then(setPersonas).catch(() => {}); });
+  useEffect(() => { api.listPersonas().then(setPersonas).catch(() => {}); }, []);
 
   const set = (key) => (val) => setForm(f => {
     const next = { ...f, [key]: val };

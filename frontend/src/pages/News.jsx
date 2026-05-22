@@ -6,15 +6,7 @@ import {
 import { api } from "../api";
 import { useRun } from "../RunContext";
 import PostCard from "../components/PostCard";
-
-const TRAITS = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"];
-const TRAIT_COLORS = {
-  openness:          "#a78bfa",
-  conscientiousness: "#818cf8",
-  extraversion:      "#f472b6",
-  agreeableness:     "#2dd4bf",
-  neuroticism:       "#fb7185",
-};
+import { TRAITS, TRAIT_COLORS_SOFT as TRAIT_COLORS } from "../constants/traitColors";
 
 const EMOTION_COLORS = {
   joy:      "#f472b6",

@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from auth import require_admin
 from database import db
-from models import Agent, Follow, PersonalitySnapshot
+from models import Agent, Follow, PersonalitySnapshot, OCEAN_KEYS, ocean_dict
 
 agents_bp = Blueprint("agents", __name__)
 
@@ -82,7 +82,7 @@ def get_personality_history(agent_id):
 def population_drift():
     """Average + SD of OCEAN scores across all agents per tick."""
     run_id = request.args.get("run_id", type=int)
-    cols = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"]
+    cols = list(OCEAN_KEYS)
 
     is_postgres = db.engine.dialect.name == "postgresql"
 
@@ -161,11 +161,7 @@ def graph():
             "name":              a.name,
             "handle":            a.handle,
             "avatar":            a.avatar,
-            "openness":          a.openness,
-            "conscientiousness": a.conscientiousness,
-            "extraversion":      a.extraversion,
-            "agreeableness":     a.agreeableness,
-            "neuroticism":       a.neuroticism,
+            **ocean_dict(a),
             "post_count":        post_counts.get(a.id, 0),
             "follower_count":    follower_counts.get(a.id, 0),
         }

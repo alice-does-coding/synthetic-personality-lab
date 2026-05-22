@@ -1,12 +1,22 @@
 from datetime import datetime, timezone
 
+from database import db
+
+# Canonical ordering for Big Five trait columns. Used wherever a route or
+# helper iterates over OCEAN fields so the field list lives in exactly one place.
+OCEAN_KEYS = ("openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism")
+
 
 def _iso(dt):
     """Serialize a naive UTC datetime as an ISO 8601 string with Z suffix."""
     if dt is None:
         return None
     return dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-from database import db
+
+
+def ocean_dict(obj):
+    """Extract the OCEAN columns from an Agent or PersonalitySnapshot as a plain dict."""
+    return {k: getattr(obj, k) for k in OCEAN_KEYS}
 
 
 class Run(db.Model):
@@ -211,7 +221,6 @@ class Post(db.Model):
             "parent_handle": self.parent.agent.handle if self.parent and self.parent.agent else None,
             "parent_content": self.parent.content if self.parent else None,
             "reply_count": reply_count if reply_count is not None else 0,
-            "thread_count": reply_count if reply_count is not None else 0,
             "news_context": self.news_context,
             "engagement_type": self.engagement_type,
             "prompt": self.prompt,
@@ -346,27 +355,3 @@ class RunEvent(db.Model):
         }
 
 
-class SimState(db.Model):
-    """Single-row table tracking global simulation state."""
-    __tablename__ = "sim_state"
-
-    id = db.Column(db.Integer, primary_key=True)
-    run_id = db.Column(db.Integer, db.ForeignKey("runs.id"), nullable=True, default=None)
-    current_tick = db.Column(db.Integer, default=0, nullable=False)
-    is_running = db.Column(db.Boolean, default=False, nullable=False)
-    ghost_post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
-    updated_at = db.Column(
-        db.DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-        nullable=False,
-    )
-
-    @classmethod
-    def get(cls):
-        state = cls.query.first()
-        if state is None:
-            state = cls(current_tick=0, is_running=False)
-            db.session.add(state)
-            db.session.commit()
-        return state

@@ -20,11 +20,6 @@ async function adminReq(path, options = {}) {
 }
 
 export const api = {
-  // sim
-  simStatus:  ()              => req("/sim/status"),
-  simTick:    (runId)         => adminReq("/sim/tick",   { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId }) }),
-  simAssess:  (runId)         => adminReq("/sim/assess", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: runId }) }),
-
   // Validate a candidate admin key BEFORE storing it. Hits an admin-protected
   // endpoint with the candidate key in the header; resolves on 200, throws on 401.
   adminCheck: (candidateKey) =>
@@ -49,7 +44,6 @@ export const api = {
   listNews:                   (runId) => req(`/news/${runId ? `?run_id=${runId}` : ""}`),
   newsPosts:                  (id)    => req(`/news/${id}/posts`),
   newsSentimentOverTime:      (runId) => req(`/news/sentiment-over-time${runId ? `?run_id=${runId}` : ""}`),
-  newsPersonalityCorrelation: (runId) => req(`/news/personality-correlation${runId ? `?run_id=${runId}` : ""}`),
   postSentimentOverTime:      (runId) => req(`/news/post-sentiment-over-time${runId ? `?run_id=${runId}` : ""}`),
   postPersonalityCorrelation: (runId) => req(`/news/post-personality-correlation${runId ? `?run_id=${runId}` : ""}`),
   sentimentContagion:         (runId) => req(`/news/contagion${runId ? `?run_id=${runId}` : ""}`),

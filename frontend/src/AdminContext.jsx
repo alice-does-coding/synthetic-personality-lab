@@ -39,7 +39,3 @@ export function AdminProvider({ children }) {
 export function useAdmin() {
   return useContext(AdminContext);
 }
-
-export function getAdminKey() {
-  return import.meta.env.VITE_ADMIN_KEY || sessionStorage.getItem(KEY) || "";
-}

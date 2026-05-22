@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from flask import Blueprint, jsonify, request
 
-from models import Agent, NewsItem, Post
+from models import Agent, NewsItem, Post, ocean_dict
 
 news_bp = Blueprint("news", __name__)
 
@@ -157,11 +157,7 @@ def post_personality_correlation():
             "agent_name":        agent.name,
             "avg_sentiment":     round(sum(sentiments) / len(sentiments), 4),
             "post_count":        len(sentiments),
-            "openness":          agent.openness,
-            "conscientiousness": agent.conscientiousness,
-            "extraversion":      agent.extraversion,
-            "agreeableness":     agent.agreeableness,
-            "neuroticism":       agent.neuroticism,
+            **ocean_dict(agent),
         })
     return jsonify(result)
 
@@ -208,54 +204,4 @@ def sentiment_contagion():
             "news_sentiment": round(sum(ns) / len(ns), 4) if ns else None,
             "post_sentiment": round(sum(ps) / len(ps), 4) if ps else None,
         })
-    return jsonify(result)
-
-
-@news_bp.route("/personality-correlation", methods=["GET"])
-def personality_correlation():
-    """For each agent: avg sentiment of news they engaged with + their OCEAN scores."""
-    run_id = request.args.get("run_id", type=int)
-    post_q = Post.query.filter(Post.news_context.isnot(None))
-    if run_id:
-        post_q = post_q.filter_by(run_id=run_id)
-    posts = post_q.all()
-    news_q = NewsItem.query.filter_by(analyzed=True)
-    if run_id:
-        news_q = news_q.filter_by(run_id=run_id)
-    items = {i.url: i.sentiment for i in news_q.all()}
-    agent_q = Agent.query.filter_by(is_active=True)
-    if run_id:
-        agent_q = agent_q.filter_by(run_id=run_id)
-    agents = {a.id: a for a in agent_q.all()}
-
-    # Avg sentiment per agent
-    agent_sentiments = {}
-    for post in posts:
-        sentiments = [
-            items[h["url"]]
-            for h in (post.news_context or [])
-            if h.get("url") in items and items[h["url"]] is not None
-        ]
-        if sentiments:
-            bucket = agent_sentiments.setdefault(post.agent_id, [])
-            bucket.extend(sentiments)
-
-    result = []
-    for agent_id, sentiments in agent_sentiments.items():
-        agent = agents.get(agent_id)
-        if not agent or agent.openness is None:
-            continue
-        result.append({
-            "agent_id":         agent_id,
-            "agent_name":       agent.name,
-            "agent_handle":     agent.handle,
-            "avg_sentiment":    sum(sentiments) / len(sentiments),
-            "engagement_count": len(sentiments),
-            "openness":         agent.openness,
-            "conscientiousness": agent.conscientiousness,
-            "extraversion":     agent.extraversion,
-            "agreeableness":    agent.agreeableness,
-            "neuroticism":      agent.neuroticism,
-        })
-
     return jsonify(result)

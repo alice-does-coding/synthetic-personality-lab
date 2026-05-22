@@ -8,9 +8,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { api } from "../api";
-import { TRAITS, TRAIT_COLORS } from "../constants/traitColors";
-
-const SHORT = { openness: "O", conscientiousness: "C", extraversion: "E", agreeableness: "A", neuroticism: "N" };
+import { TRAITS, TRAIT_COLORS, TRAIT_SHORT } from "../constants/traitColors";
 
 const AGENT_PALETTE = [
   "#e879f9","#38bdf8","#fb923c","#a3e635","#f472b6",
@@ -267,7 +265,7 @@ function AgentRadar({ agent }) {
   const p = agent.personality;
   const hasScores = Object.values(p).some((v) => v != null);
   const data = TRAITS.map((trait) => ({
-    trait: SHORT[trait],
+    trait: TRAIT_SHORT[trait],
     value: p[trait] != null ? Math.round(p[trait]) : 0,
     color: TRAIT_COLORS[trait],
   }));
@@ -283,7 +281,7 @@ function AgentRadar({ agent }) {
               <PolarGrid stroke="var(--border)" />
               <PolarAngleAxis dataKey="trait"
                 tick={({ x, y, payload }) => {
-                  const color = TRAIT_COLORS[TRAITS.find(k => SHORT[k] === payload.value)];
+                  const color = TRAIT_COLORS[TRAITS.find(k => TRAIT_SHORT[k] === payload.value)];
                   return (
                     <text x={x} y={y} fill={color} textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={700}>
                       {payload.value}

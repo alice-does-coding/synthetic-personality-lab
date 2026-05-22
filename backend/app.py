@@ -36,14 +36,12 @@ def create_app(config_class=Config):
     from routes.posts import posts_bp
     from routes.sim import sim_bp
     from routes.news import news_bp
-    from routes.nlp import nlp_bp
     from routes.runs import runs_bp
 
     app.register_blueprint(agents_bp, url_prefix="/api/agents")
     app.register_blueprint(posts_bp, url_prefix="/api/posts")
     app.register_blueprint(sim_bp, url_prefix="/api/sim")
     app.register_blueprint(news_bp, url_prefix="/api/news")
-    app.register_blueprint(nlp_bp, url_prefix="/api/nlp")
     app.register_blueprint(runs_bp, url_prefix="/api/runs")
 
     if not app.config.get("TESTING"):
@@ -61,7 +59,7 @@ def create_app(config_class=Config):
 
             threading.Thread(target=_resume_running_runs, daemon=True).start()
 
-        from engine import start_news_analyzer, start_post_analyzer
+        from nlp_analyzer import start_news_analyzer, start_post_analyzer
         start_news_analyzer(app)
         start_post_analyzer(app)
 

@@ -31,8 +31,6 @@ class Config:
     REASSESSMENT_INTERVAL = int(os.getenv("REASSESSMENT_INTERVAL", 10))
     # Paid tier: 12 req/sec
     MISTRAL_RATE_LIMIT = float(os.getenv("MISTRAL_RATE_LIMIT", 12.0))
-    # Local NLP microservice
-    NLP_SERVICE_URL = os.getenv("NLP_SERVICE_URL", "http://localhost:5001")
     # Hugging Face Inference API key — enables news sentiment/emotion analysis + LLM inference
     HF_API_KEY = os.getenv("HF_API_KEY")
     # HF Pro serverless rate limit (req/sec) — conservative default for Pro tier

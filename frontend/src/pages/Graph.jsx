@@ -3,9 +3,7 @@ import { Link } from "react-router-dom";
 import ForceGraph2D from "react-force-graph-2d";
 import { api } from "../api";
 import { useRun } from "../RunContext";
-import { TRAITS, TRAIT_COLORS } from "../constants/traitColors";
-
-const SHORT = { openness: "OPE", conscientiousness: "CON", extraversion: "EXT", agreeableness: "AGR", neuroticism: "NEU" };
+import { TRAITS, TRAIT_COLORS, TRAIT_SHORT3 as SHORT } from "../constants/traitColors";
 
 function lerpColor(a, b, t) {
   const hex = (s) => parseInt(s, 16);

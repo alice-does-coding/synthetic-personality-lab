@@ -3,9 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useRun } from "../RunContext";
 import Avatar from "../components/Avatar";
-import { TRAIT_COLORS } from "../constants/traitColors";
-
-const SHORT = { openness: "O", conscientiousness: "C", extraversion: "E", agreeableness: "A", neuroticism: "N" };
+import { TRAIT_COLORS, TRAIT_SHORT } from "../constants/traitColors";
 
 
 function AgentCard({ agent }) {
@@ -48,7 +46,7 @@ function AgentCard({ agent }) {
                 padding: "3px 8px", borderRadius: 20,
                 background: color + "18", border: `1px solid ${color}33`,
               }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: "0.3px" }}>{SHORT[trait]}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: "0.3px" }}>{TRAIT_SHORT[trait]}</span>
                 <span style={{ fontSize: 11, color: "var(--text-h)", fontWeight: 600 }}>{score}</span>
               </div>
             );

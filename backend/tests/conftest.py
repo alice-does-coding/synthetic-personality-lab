@@ -19,7 +19,6 @@ class TestConfig:
     IPIP_WORKERS = 1
     REASSESSMENT_INTERVAL = 10
     MISTRAL_RATE_LIMIT = 1.0
-    NLP_SERVICE_URL = "http://localhost:5001"
     HF_API_KEY = None
     N_THOUGHTS = 3
     MAX_POST_TOKENS = 300

@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
+import { TRAITS as TRAIT_KEYS, TRAIT_COLORS, TRAIT_SHORT, TRAIT_LABELS } from "../constants/traitColors";
 
-const TRAITS = [
-  { key: "openness",          short: "O", color: "#8b5cf6", label: "Openness" },
-  { key: "conscientiousness", short: "C", color: "#3b82f6", label: "Conscientiousness" },
-  { key: "extraversion",      short: "E", color: "#f59e0b", label: "Extraversion" },
-  { key: "agreeableness",     short: "A", color: "#22c55e", label: "Agreeableness" },
-  { key: "neuroticism",       short: "N", color: "#ef4444", label: "Neuroticism" },
-];
+const TRAITS = TRAIT_KEYS.map((key) => ({
+  key,
+  short: TRAIT_SHORT[key],
+  color: TRAIT_COLORS[key],
+  label: TRAIT_LABELS[key],
+}));
 
 const LIFECYCLE = [
   {

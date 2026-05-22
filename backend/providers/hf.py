@@ -1,30 +1,23 @@
 import logging
-import threading
 import time
 
 import requests
 
 from config import Config
+from providers._throttle import ProviderGate
 from providers.base import LLMAuthError, LLMRateLimitError
 
 logger = logging.getLogger(__name__)
 
-# ── Rate limiter ──────────────────────────────────────────────────────────────
-# HF Pro serverless: ~10 req/sec is safe; default conservative at 8
-
-_rl_lock = threading.Lock()
-_rl_next = 0.0  # monotonic time when next call is allowed
-
-# Auth-failure latch — set on first 401 this tick; subsequent in-flight workers
-# bail immediately without making HTTP calls or logging duplicate errors.
-_auth_failed = threading.Event()
+# HF Pro serverless: ~10 req/sec is safe; default conservative at 8.
+_gate = ProviderGate(rate_limit=Config.HF_RATE_LIMIT, name="hf")
 
 HF_INFERENCE_URL = "https://router.huggingface.co/v1/chat/completions"
 
 
 def reset_auth():
     """Clear the auth-failure latch. Called at tick start via llm.py."""
-    _auth_failed.clear()
+    _gate.reset_auth()
 
 
 def chat(messages, max_tokens, temperature, model):
@@ -36,8 +29,7 @@ def chat(messages, max_tokens, temperature, model):
     Raises LLMAuthError on 401.
     Raises LLMRateLimitError if all retries on 429 are exhausted.
     """
-    global _rl_next
-    if _auth_failed.is_set():
+    if _gate.is_auth_failed():
         raise LLMAuthError("HF API key invalid (auth failure already seen this tick)")
     url = HF_INFERENCE_URL
     headers = {
@@ -53,17 +45,11 @@ def chat(messages, max_tokens, temperature, model):
 
     max_retries = 6
     for attempt in range(max_retries):
-        # Proactive throttle
-        with _rl_lock:
-            now = time.monotonic()
-            wait = _rl_next - now
-            if wait > 0:
-                time.sleep(wait)
-            _rl_next = time.monotonic() + (1.0 / Config.HF_RATE_LIMIT)
+        _gate.acquire()
 
         try:
             resp = requests.post(url, headers=headers, json=payload, timeout=120)
-        except requests.exceptions.Timeout as exc:
+        except requests.exceptions.Timeout:
             if attempt < max_retries - 1:
                 backoff = 2 ** attempt
                 logger.warning("HF request timeout (attempt %d/%d) — backing off %ds",
@@ -77,9 +63,8 @@ def chat(messages, max_tokens, temperature, model):
             return data["choices"][0]["message"]["content"]
 
         if resp.status_code == 401:
-            if not _auth_failed.is_set():
+            if _gate.mark_auth_failed():
                 logger.error("HF 401 — invalid or exhausted API key. Stopping.")
-                _auth_failed.set()
             raise LLMAuthError(f"HF auth error: {resp.text}")
 
         if resp.status_code == 403:

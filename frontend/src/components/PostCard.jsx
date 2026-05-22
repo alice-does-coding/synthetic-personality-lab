@@ -1,48 +1,15 @@
 import { Link } from "react-router-dom";
 import MarkdownText from "./MarkdownText";
 import Avatar from "./Avatar";
+import Headline from "./Headline";
 import { agentColor } from "../utils/colors";
-
-function Headline({ h, mode }) {
-  const label = [h.source, h.category, mode].filter(Boolean).join(" · ");
-  return (
-    <div style={{
-      display: "flex", alignItems: "baseline", gap: 10,
-      padding: "5px 10px",
-      marginBottom: 12,
-      borderLeft: "2px solid var(--fuchsia, #e879f9)",
-      background: "rgba(232,121,249,0.05)",
-    }}>
-      <span style={{
-        fontSize: 10, fontWeight: 700,
-        color: "var(--fuchsia, #e879f9)",
-        textTransform: "uppercase", letterSpacing: "0.08em",
-        whiteSpace: "nowrap", flexShrink: 0,
-      }}>
-        {label}
-      </span>
-      {h.url ? (
-        <a href={h.url} target="_blank" rel="noopener noreferrer" style={{
-          fontSize: 12, color: "var(--text-h)", lineHeight: 1.4,
-          textDecoration: "none",
-          overflow: "hidden",
-          display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical",
-        }}>
-          {h.title}
-        </a>
-      ) : (
-        <span style={{ fontSize: 12, color: "var(--text-h)", lineHeight: 1.4 }}>{h.title}</span>
-      )}
-    </div>
-  );
-}
 
 export default function PostCard({ post, depth = 0 }) {
   const time = new Date(post.created_at).toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit",
   });
 
-  const threadCount = post.thread_count ?? post.reply_count ?? 0;
+  const replyCount = post.reply_count ?? 0;
   const headline    = post.news_context?.[0];
   const mode        = post.engagement_type?.startsWith("news:") ? post.engagement_type.split(":")[1] : null;
   const isObserver  = post.engagement_type === "observer";
@@ -110,25 +77,25 @@ export default function PostCard({ post, depth = 0 }) {
             to={`/social/thread/${post.id}`}
             style={{
               fontSize: 11,
-              color: threadCount > 0 ? color : "var(--text)",
-              opacity: threadCount > 0 ? 1 : 0.45,
+              color: replyCount > 0 ? color : "var(--text)",
+              opacity: replyCount > 0 ? 1 : 0.45,
               textDecoration: "none",
               display: "inline-flex", alignItems: "center", gap: 5,
-              fontWeight: threadCount > 0 ? 700 : 400,
+              fontWeight: replyCount > 0 ? 700 : 400,
               letterSpacing: "0.04em",
             }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" strokeLinejoin="miter">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
-            {threadCount > 0 ? (
-              <>{threadCount} {threadCount === 1 ? "reply" : "replies"}</>
+            {replyCount > 0 ? (
+              <>{replyCount} {replyCount === 1 ? "reply" : "replies"}</>
             ) : (
               <>no replies</>
             )}
           </Link>
 
-          {threadCount > 0 && (
+          {replyCount > 0 && (
             <Link
               to={`/social/thread/${post.id}`}
               style={{

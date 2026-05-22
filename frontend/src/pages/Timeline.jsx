@@ -2,19 +2,19 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import PostCard from "../components/PostCard";
 import { useRun } from "../RunContext";
+import { TRAITS as TRAIT_KEYS, TRAIT_COLORS_SOFT, TRAIT_SHORT, TRAIT_LABELS } from "../constants/traitColors";
 
-const TRAITS = [
-  { key: "agent_openness",          label: "Openness",          short: "O", color: "#a78bfa" },
-  { key: "agent_conscientiousness", label: "Conscientiousness",  short: "C", color: "#818cf8" },
-  { key: "agent_extraversion",      label: "Extraversion",       short: "E", color: "#f472b6" },
-  { key: "agent_agreeableness",     label: "Agreeableness",      short: "A", color: "#2dd4bf" },
-  { key: "agent_neuroticism",       label: "Neuroticism",        short: "N", color: "#fb7185" },
-];
+const TRAITS = TRAIT_KEYS.map((key) => ({
+  key:   `agent_${key}`,
+  label: TRAIT_LABELS[key],
+  short: TRAIT_SHORT[key],
+  color: TRAIT_COLORS_SOFT[key],
+}));
 
 function sortPosts(posts, by, trait) {
   const copy = [...posts];
   if (by === "latest")    return copy.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  if (by === "discussed") return copy.sort((a, b) => (b.thread_count ?? b.reply_count ?? 0) - (a.thread_count ?? a.reply_count ?? 0));
+  if (by === "discussed") return copy.sort((a, b) => (b.reply_count ?? 0) - (a.reply_count ?? 0));
   if (by === "trait" && trait) return copy.sort((a, b) => (b[trait.key] ?? 0) - (a[trait.key] ?? 0));
   return copy;
 }
